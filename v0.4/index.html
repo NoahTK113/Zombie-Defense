@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zombie Defense</title>
+    <link href="https://fonts.googleapis.com/css2?family=Jura:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #111; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
+        canvas { display: block; width: 100vw; height: 100vh; cursor: crosshair; }
+    </style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<script>
+// Canvas setup (needed by all scripts)
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+function resizeCanvas() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+</script>
+<script src="js/constants.js"></script>
+<script src="js/state.js"></script>
+<script src="js/sound.js"></script>
+<script src="js/rock_texture.js"></script>
+<script src="js/assets.js"></script>
+<script src="js/world.js"></script>
+<script src="js/physics.js"></script>
+<script src="js/particles.js"></script>
+<script src="js/save.js"></script>
+<script src="js/player.js"></script>
+<script src="js/inventory.js"></script>
+<script src="js/comms.js"></script>
+<script src="js/intro.js"></script>
+<script src="js/story.js"></script>
+<script src="js/zombies.js"></script>
+<script src="js/combat.js"></script>
+<script src="js/crafting.js"></script>
+<script src="js/input.js"></script>
+<script src="js/debug.js"></script>
+<script src="js/artifact.js"></script>
+<script src="js/lighting.js"></script>
+<script src="js/hud.js"></script>
+<script src="js/menus.js"></script>
+<script src="js/renderer.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
