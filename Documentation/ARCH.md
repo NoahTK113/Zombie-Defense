@@ -4,7 +4,7 @@
 
 Plain language reference for all major systems and how they connect. Update when structure changes.
 
-> **Working version: v0.4** — All code changes go in the current version folder only. Never modify previous versions.
+> **Working version: v0.5** — All code changes go in the current version folder only. Never modify previous versions.
 
 ## Rendering Layer Order
 

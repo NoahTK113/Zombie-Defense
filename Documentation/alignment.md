@@ -2,7 +2,7 @@
 
 Tracks deviations from the target architecture described in ARCH.md. Update as issues are resolved.
 
-Last updated: 2026-03-09 (post wave auto-advance system)
+Last updated: 2026-03-10 (post combat overhaul — v0.5)
 
 ### 1. System Ownership Violations
 
@@ -109,6 +109,7 @@ Collision resolution is currently scattered: player tile collisions in player.js
 - **Sound** is in its own file (sound.js) with playSound(), playSoundStretched(), ambient loop. Hybrid: `<audio>` elements for one-shots (file:// compatible), Web Audio API AudioBuffers for pitch-shifted playback. Sound triggers wired into combat.js, player.js, zombies.js, artifact.js.
 - **Dual Flow Fields** — zombies.js computes both artifact and player flow fields with BFS path distance. Per-zombie targeting uses path distance comparison (closer target wins). Player flow field recomputes on tile-granularity player movement. Both fields invalidated on block solidity changes.
 - **Wave Auto-Advance** — Conduit circle (artifact UI circle 2) starts waves and controls auto-advance. `advanceWave()` in artifact.js owns wave initiation. `updateWaveSystem()` in zombies.js detects wave completion, starts 15s countdown when auto-advance is on, and fires next wave. Wave identity (`waveNumber`, `waveState`, `waveAutoAdvance`, `waveCountdown`) lives exclusively in gameState. HUD shows countdown timer and wave status. Conduit label updates dynamically ("Advance State" / "Resume Advance" / "Pause Advance").
+- **Combat system** — combat.js owns all melee logic: directional 230° swing arc with hermite easing, SAT collision (rotated rect vs AABB), variable grip range (choke-up), swing trail, screen shake, same-direction cooldown. Separate knockback velocity channel (`knockVx`/`knockVy`) on zombies with acceleration-based decay. Debug collider overlay (backtick key). Key rebinding: Tab = weapon cycle, C = comms.
 
 ### 8. Current File Structure
 

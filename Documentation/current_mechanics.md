@@ -1,4 +1,4 @@
-# Zombie Defense — Current Mechanics (v0.4)
+# Zombie Defense — Current Mechanics (v0.5)
 
 Plain language reference for every gameplay system as it exists in code today. Numbers pulled directly from source.
 
@@ -38,7 +38,8 @@ Plain language reference for every gameplay system as it exists in code today. N
 | D / Right Arrow | Move right |
 | W / Space / Up Arrow | Jump (when on ground) |
 | F | Toggle flashlight |
-| Q | Swap weapon |
+| Tab | Cycle weapon |
+| C | Open comms |
 | E | Interact with artifact |
 | ESC | Pause |
 
@@ -223,10 +224,11 @@ All materials are available from wave 0 (no unlock gating):
 
 ### Emergency Shovel (Default Melee)
 - Damage: 15 HP per swing (to zombies), 50 HP per swing (to blocks)
-- Swing duration: 0.3 seconds
-- Range: 2.5 tiles from player center
-- Knockback: 180 px/sec
-- Animation: rotates from back to front, tracks cursor direction
+- Base swing duration: 0.3 seconds (effective: max(0.15s, base × 0.7) = 0.21s)
+- Range: 2.5 tiles from player center (variable with choke-up — see Combat §8)
+- Knockback: 180 px/sec (scaled by angular velocity and grip distance)
+- Swing arc: 230° centered on cursor direction, hermite easing
+- Left click = CCW swing, right click = CW swing
 - Can hit multiple zombies in a single swing
 - Knocks absorbing zombies out of absorption (grants 0.3s re-absorption immunity)
 
@@ -250,22 +252,52 @@ All materials are available from wave 0 (no unlock gating):
 
 ## 8. Combat
 
-### Melee
-- Collider: rotated rectangle (0.3 tiles wide, 0.4 tiles tall) at the end of the weapon handle
-- Hit detection: rotated rectangle vs circle overlap test against each zombie
-- Can hit multiple zombies per swing
+### Melee Swing System
+- **Swing arc**: 230° (`MELEE_SWING_ARC`) centered on cursor direction at swing start
+- **Swing easing**: Hermite cubic spline with asymmetric velocity (20% start, 30% end, peak past midpoint)
+- **Effective speed**: `max(MELEE_MIN_SWING_DURATION, weapon.speed × MELEE_SWING_SPEED_MULT)` — floor of 0.15s, multiplier of 0.7
+- **Directions**: Left click = counterclockwise, right click = clockwise
+- **Same-direction cooldown**: After swing finishes, same direction blocked for `duration × MELEE_SAME_DIR_COOLDOWN` (1.0). Opposite direction bypasses cooldown (encourages alternating)
 - Blocked during: death, interface open, paused, game over
+
+### Variable Grip Range (Choke-Up)
+- Cursor distance from player pivot determines weapon reach per swing
+- Close clicks = short range, far clicks = full reach
+- Grip distance clamped between `armOffset + steelHeight` (minimum) and full weapon tip (maximum)
+- Cursor distance includes half the collider length so click point = collider center
+- Collider position, weapon sprite offset, swing trail, and knockback all scale with grip distance
+
+### Melee Collider
+- **Shape**: Rotated rectangle (weapon width × steel height + tip buffer)
+- **Hit detection**: Separating Axis Theorem (SAT) — rotated rect vs axis-aligned bounding box
+- **Zombie hitbox**: Same AABB as bullets (`getZombieBounds`), expanded by `MELEE_HIT_PADDING` (8px) for melee only
+- **Tip buffer**: `MELEE_COLLIDER_TIP_BUFFER` (0.3 tiles) extends collider past weapon tip
+- **Debug overlay**: Backtick key toggles red collider visualization
+- Can hit multiple zombies per swing
+
+### Knockback
+- **Separate velocity channel**: `knockVx`/`knockVy` on each zombie, independent of movement AI velocity — prevents speed clamping from nullifying knockback
+- **Direction**: 45° blend of swing tangent and radial outward from pivot. Tangent direction flips with CW/CCW swing
+- **Angular velocity scaling**: Knockback magnitude × normalized `swingEaseVel(progress) / peakVel` — hits at peak swing speed deal full knockback, hits at start/end deal less
+- **Grip scaling**: Knockback × `meleeGripDist / fullTipDist` — choked-up swings deal proportionally less knockback
+- **Decay**: Linear deceleration using zombie's own movement acceleration (walkers: `speed/0.5`, flyers: `speed/0.15`). Not friction-based
+- **Wall collision**: Knockback velocity zeroed on the contact axis when zombie hits a wall (prevents phasing through terrain)
+- Knockback grants 0.3 seconds of absorption immunity (prevents instant re-absorption at artifact)
+
+### Screen Shake
+- Random camera offset (±`SCREEN_SHAKE_INTENSITY` = 3 px) triggered on each melee hit
+- Decays over `SCREEN_SHAKE_DURATION` (0.12s)
+
+### Swing Trail
+- Tapered polygon trailing weapon tip, fading over 0.2s
+- Peak alpha: 0.35, white fill
+- Lives in combat.js (`drawSwingTrail`), drawn by renderer before lighting layer
 
 ### Bullets
 - Sub-stepping: bullet position checked every 0.6 tiles along its path each frame
 - Prevents fast bullets from phasing through zombies
 - Bullets that hit terrain are destroyed
 - Penetration counter decrements per zombie hit — bullet destroyed when counter reaches 0
-
-### Knockback
-- All hits apply knockback impulse away from the damage source
-- Knockback grants 0.3 seconds of absorption immunity (prevents instant re-absorption at artifact)
-- Direction: away from bullet trajectory or melee contact point
 
 ---
 
@@ -335,10 +367,12 @@ Each zombie gets a randomized speed within its wave's min–max range.
 - Interrupted zombies get 0.3s immunity to re-absorption
 
 ### Collision
-- Zombie body radius: 8 pixels (used for all collision)
+- Zombie body radius: 8 pixels (`ZOMBIE_COLLISION_R`, used for zombie-zombie and player-zombie)
+- Zombie AABB: `getZombieBounds()` used for bullet and melee hit detection
 - Zombie-zombie: circle overlap, soft separation (0.07x overlap correction per frame)
 - Bounce coefficient: 0.02 (nearly inelastic — they absorb each other's momentum)
-- Player-zombie: same circle system, applies contact damage + knockback to player
+- Player-zombie: circle system, applies contact damage + knockback to player. Absorbing zombies still collide with player (intentional — do not skip)
+- Flyer wall penalty: soft acceleration push (`FLYER_WALL_MULT` = 1.2× own accel). Zeroes both movement velocity and knockback velocity on the contact axis
 
 ### Targeting (Dual Flow Field)
 - Two flow fields computed: one rooted at the artifact, one rooted at the player
@@ -582,6 +616,7 @@ Developer-only bindings for testing. All route through gameState or system APIs.
 | F9 | Clear crafted weapons, reset to shovel |
 | F10 | Add 1000 KJ |
 | F11 | Toggle flow field debug display |
+| Backtick (`) | Toggle melee collider debug overlay (red rect) |
 | Ctrl+S | Save world |
 | Ctrl+L | Load world |
 
@@ -660,4 +695,4 @@ Hybrid audio system providing sound effects and ambient atmosphere.
 - `playSoundStretched(name, targetDuration, volumeOverride)` — resampled to target duration, pitch shifts naturally
 
 ### Sound Files
-All `.wav` files stored in `v0.4/sounds/` folder.
+All `.wav` files stored in `v0.5/sounds/` folder.
