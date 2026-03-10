@@ -66,10 +66,23 @@
 ---
 
 ## 6. Combat Feel
-- [ ] Weighted melee with cooldown/commitment (no spam)
-- [ ] Movement integrated with attack feel
-- [ ] Hit feedback: knockback, screen shake, visual effect on impact
-- [ ] Each weapon type feels distinct
+Ordered implementation plan:
+
+1. [x] **Key rebinding** — Tab cycles weapons, C opens comms. Updated input.js, comms.js, player.js, hud.js, renderer.js.
+2. [x] **Physics-based knockback** — Melee knockback derived from `swingWeight × range`. Separate knockVx/knockVy channel on zombies (bypasses velocity clamping). Decayed by zombie's own acceleration. Wall collisions zero knockback on contact axis.
+3. [x] **Increase base weapon speed** — `MELEE_SWING_SPEED_MULT` (0.7) scales all swing durations. `MELEE_MIN_SWING_DURATION` (0.15s) floor. Crafting stats show effective speed.
+4. [x] **Cursor-directed swing arc** — Aim angle stored at swing start. 230° arc (`MELEE_SWING_ARC`) centered on cursor direction. Hermite easing with asymmetric velocity (20% start, 30% end, peak past midpoint). Left click = CCW, right click = CW.
+5. [x] **Directional knockback** — Knockback 45° between swing tangent and radial (outward from pivot). Scaled by instantaneous angular velocity from easing curve and grip distance ratio.
+6. [x] **Same-direction cooldown** — After swing, cooldown of `duration × MELEE_SAME_DIR_COOLDOWN` blocks same direction only. Opposite direction swings skip cooldown (encourages alternating).
+7. [x] **Screen shake on melee hit** — Random camera offset (±`SCREEN_SHAKE_INTENSITY` px) decaying over `SCREEN_SHAKE_DURATION` seconds. Triggered per hit.
+8. [x] **Swing trail** — Fading tapered polygon trailing weapon tip. 0.2s fade, 0.35 peak alpha. Lives in combat.js, drawn by renderer before lighting.
+9. [x] **Variable grip range (choke-up)** — Cursor distance from pivot determines weapon reach per swing. Close clicks = short range, far clicks = full reach. Collider, sprite, trail, and knockback all adjust. Collider covers steel + tip buffer only.
+10. [x] **Weapon collider overhaul** — Melee uses rotated-rect-vs-AABB (SAT), same zombie AABB as bullets. `MELEE_HIT_PADDING` expands zombie hitbox for melee. `MELEE_COLLIDER_TIP_BUFFER` extends past weapon tip. Debug overlay (backtick key) shows collider in red.
+11. [x] **Absorbing zombie collision fix** — Absorbing zombies no longer skip player collision. Comment guard prevents regression.
+12. [ ] **Dash mechanic** — Double-tap directional key to dash. Dash state in player.js. Works while swinging or not. Needs tuning.
+13. [ ] **Hitstop (hit freeze)** — Freeze game for 1-2 frames on melee hit. hitPauseTimer in main.js skips update when > 0.
+14. [ ] **Melee lunge** — Small forward impulse toward cursor on swing start. Adds momentum, can pair with dash.
+15. [ ] **Swing animation variants** — 2-3 random swing patterns. Randomly selected at swing start.
 
 ---
 
@@ -157,15 +170,29 @@ A three-beat quest inspired by Myst/Outer Wilds. Simple but satisfying.
 
 ---
 
-## 13. Wave Auto-Advance
-- [ ] After a wave completes, next wave starts automatically after 15-second gap
-- [ ] Enabled by default when player starts first wave
-- [ ] Player can toggle "Pause State Advancement" in artifact UI to stop auto-advance
-- [ ] Toggling back on resumes auto-advance behavior
+## 13. Wave Auto-Advance ✓ DONE
+- [x] After a wave completes, next wave starts automatically after 15-second countdown
+- [x] Enabled by default when player clicks Conduit (artifact circle 3) to start first wave
+- [x] Player can toggle auto-advance off/on via Conduit circle during any wave state
+- [x] Conduit label updates dynamically: "Advance State" / "Resume Advance" / "Pause Advance"
+- [x] HUD shows countdown timer ("Next wave in Xs") and wave status ("Wave active")
+- [x] Wave identity (waveNumber, waveState, waveAutoAdvance, waveCountdown) lives in gameState
 
 ---
 
-## 14. Balance & Polish
+## 14. Zombie Variety & Targeting
+- [ ] **Player-hunter zombie variant** — Random zombies that only target the player (ignore artifact). Prevents player from safely turtling behind walls.
+- [ ] **Block-breaker zombie variant** — Zombies that always destroy blocks on contact. Forces player to actively defend, not just wall off.
+- [ ] **Bug fix: artifact targeting** — Zombies only path toward upper-left corner of artifact instead of spreading across all artifact tiles. Fix flow field seed to include all artifact tile positions.
+
+---
+
+## 15. Melee vs Blocks
+- [ ] **Swing stops on block contact** — Melee weapons slow down or stop their swing arc when hitting a solid block. Prevents unrealistic phasing through terrain.
+
+---
+
+## 16. Balance & Polish
 - [ ] Tune block health values
 - [ ] Tune weapon damage, range, cooldown per type
 - [ ] Tune zombie health, speed, pathfinding aggression per wave

@@ -183,9 +183,7 @@ function playerHandleKey(code) {
         playSound(gameState.flashlightOn ? 'flashlightOn' : 'flashlightOff');
         if (gameState.tutorialStep === 'flashlight') gameState.tutorialStep = 'comms';
     }
-    if (code === 'KeyQ' && weapons.length > 1) {
-        activeWeaponIndex = (activeWeaponIndex + 1) % weapons.length;
-    }
+    // Weapon cycling moved to Tab in input.js
     if (code === 'KeyE') {
         artifactHandleKey(code);
     }
@@ -207,6 +205,6 @@ function respawnPlayer() {
     player.vx = 0;
     player.vy = 0;
     // Spawn on top of the artifact
-    player.x = (PEDESTAL_CENTER_X + 0.5) * TILE_SIZE;
+    player.x = (ARTIFACT_CENTER_X + 0.5) * TILE_SIZE;
     player.y = ARTIFACT_TY * TILE_SIZE; // feet on top of artifact
 }

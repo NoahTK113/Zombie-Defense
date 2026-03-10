@@ -90,33 +90,6 @@ function generateArtifactVeins() {
     return c;
 }
 
-// --- Channel Vein Pattern ---
-function generateChannelVeins() {
-    const startY = ARTIFACT_TY + Math.floor(ARTIFACT_SIZE / 2);
-    const rows = WORLD_H - startY;
-    const c = document.createElement('canvas');
-    c.width = TILE_SIZE;
-    c.height = rows * TILE_SIZE;
-    const vc = c.getContext('2d');
-    const centerX = TILE_SIZE / 2;
-    let x = centerX, y = 0;
-    const totalH = rows * TILE_SIZE;
-    while (y < totalH) {
-        const nx = x + (Math.random() - 0.5) * 3;
-        const ny = y + 2;
-        const clampedX = Math.max(3, Math.min(TILE_SIZE - 3, nx));
-        vc.strokeStyle = `rgba(255, 255, 255, ${0.3 + Math.random() * 0.4})`;
-        vc.lineWidth = 2.5 + Math.random() * 1.5;
-        vc.lineCap = 'round';
-        vc.beginPath();
-        vc.moveTo(x, y);
-        vc.lineTo(clampedX, ny);
-        vc.stroke();
-        x = clampedX;
-        y = ny;
-    }
-    return c;
-}
 
 // --- Initialize All Assets ---
 // Earth: procedurally generated rock textures at TILE_TEXELS resolution
@@ -125,11 +98,7 @@ assets.earth = generateRockTiles(32);
 assets.brick = generateTileVariants(16, 140, 30, 70, 20, 50, 20);
 // Artifact base: R 10-29, G 25-49, B 55-89
 assets.artifactBase = generateTileVariants(16, 10, 20, 25, 25, 55, 35);
-// Pedestal: very dark 12-29 with slight blue tint
-assets.pedestal = generateTileVariants(16, 12, 18, 12, 18, 12, 23);
 // Fractal vein pattern (128x128, white on transparent)
 assets.artifactVeins = generateArtifactVeins();
-// Channel vein pattern (20px wide, extends down from artifact)
-assets.channelVeins = generateChannelVeins();
 // Noise texture (256x256, blue-tinted — shared by renderer and crafting)
 assets.noise = generateNoiseTexture(256);

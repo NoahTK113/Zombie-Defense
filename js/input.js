@@ -25,10 +25,18 @@ window.addEventListener('keydown', e => {
         return;
     }
 
-    // --- Tab: comms open/close (works across all states including intro) ---
+    // --- C: comms open/close (works across all states including intro) ---
+    if (e.code === 'KeyC') {
+        commsHandleInput(e.code);
+        return;
+    }
+
+    // --- Tab: weapon cycling (prevent browser focus change) ---
     if (e.code === 'Tab') {
         e.preventDefault();
-        commsHandleInput(e.code);
+        if (!gameState.paused && !intro.active && !isInterfaceOpen() && !player.dead && !gameState.gameOver && weapons.length > 1) {
+            activeWeaponIndex = (activeWeaponIndex + 1) % weapons.length;
+        }
         return;
     }
 
@@ -139,6 +147,8 @@ canvas.addEventListener('mousedown', e => {
             craftMouseDown(2, mouse.x, mouse.y);
             return;
         }
+        // In player mode, right click is CW swing — skip camera drag
+        if (gameState.gameMode === 'player') return;
         mouse.dragStartX = e.clientX;
         mouse.dragStartY = e.clientY;
         mouse.camStartX = camera.x;

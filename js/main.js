@@ -91,7 +91,7 @@ computeFlowField();
 
 // Place player near artifact (TODO: rebuild spawn flattening later)
 {
-    const spawnTX = PEDESTAL_CENTER_X + 5;
+    const spawnTX = ARTIFACT_CENTER_X + 5;
     const groundY = getGroundHeight(spawnTX);
     player.x = (spawnTX + 0.5) * TILE_SIZE;
     player.y = groundY * TILE_SIZE;

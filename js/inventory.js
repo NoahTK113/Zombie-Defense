@@ -12,7 +12,8 @@ const SHOVEL_WEAPON = {
     blockDamage: SHOVEL_BLOCK_DAMAGE,
     speed: SHOVEL_SWING_DURATION,
     range: SHOVEL_RANGE,
-    knockback: SHOVEL_KNOCKBACK,
+    swingWeight: SHOVEL_SWING_WEIGHT,
+    knockback: MELEE_KNOCKBACK_COEFF * Math.sqrt(SHOVEL_SWING_WEIGHT) * SHOVEL_RANGE,
     sprite: null,       // null = use built-in shovel drawing
     visualHeight: 1.35, // tiles
     colliderWidth: 0.3, // tiles (shovel blade width)
@@ -33,13 +34,15 @@ function loadWeaponsFromStorage() {
     for (const data of saved) {
         const img = new Image();
         img.src = data.sprite;
+        const sw = data.swingWeight || SHOVEL_SWING_WEIGHT;
         weapons.push({
             name: data.name,
             damage: data.damage,
             blockDamage: data.damage,
             speed: data.speed,
             range: data.range,
-            knockback: SHOVEL_KNOCKBACK,
+            swingWeight: sw,
+            knockback: data.knockback || MELEE_KNOCKBACK_COEFF * Math.sqrt(sw) * data.range,
             sprite: img,
             visualHeight: data.visualHeight || 1.35,
             colliderWidth: data.colliderWidth || 0,

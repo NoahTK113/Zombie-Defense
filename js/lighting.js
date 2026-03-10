@@ -15,7 +15,7 @@ function drawLighting(camX, camY, effectiveZoom) {
 
     lightCtx.globalCompositeOperation = 'destination-out';
 
-    const lightWorldX = (PEDESTAL_CENTER_X + 0.5) * TILE_SIZE;
+    const lightWorldX = (ARTIFACT_CENTER_X + 0.5) * TILE_SIZE;
     const lightWorldY = (ARTIFACT_TY + ARTIFACT_SIZE / 2) * TILE_SIZE;
     const lsx = (lightWorldX - camX) * effectiveZoom;
     const lsy = (lightWorldY - camY) * effectiveZoom;

@@ -128,8 +128,8 @@ function updateComms(dt) {
 }
 
 function commsHandleInput(code) {
-    // Tab toggles comms open/close
-    if (code === 'Tab') {
+    // C toggles comms open/close
+    if (code === 'KeyC') {
         if (gameState.commsOpen) {
             if (!comms.inputLocked) {
                 gameState.commsOpen = false;

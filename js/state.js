@@ -27,6 +27,12 @@ const gameState = {
     commsRelayDone: false,     // true after relay sequence has been shown
     commsConvoChoice1: -1,     // tracks choice 1 selection for conditional branching
 
+    // --- Wave Identity & Advancement ---
+    waveNumber: 0,              // current wave (0 = hasn't started yet)
+    waveState: 'idle',          // 'idle' | 'active' | 'countdown'
+    waveAutoAdvance: false,     // auto-start next wave after countdown
+    waveCountdown: 0,           // seconds remaining before next wave starts
+
     // --- Artifact Health ---
     artifactHP: ARTIFACT_MAX_HP,
     artifactCorrupted: false,   // true while artifact is disabled
@@ -35,6 +41,7 @@ const gameState = {
     debugSpawnDisabled: false,
     debugNoTargetPlayer: false,
     debugShowFlowField: false,
+    debugShowColliders: false,
 };
 
 // Helper: replaces the old interfaceOpen loose global.

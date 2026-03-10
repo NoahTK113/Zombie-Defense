@@ -2,9 +2,6 @@
 // ZOMBIE DEFENSE - World (Tiles, Terrain, Chunks)
 // ============================================================
 
-// Channel vein position constants (used by renderer)
-const CHANNEL_VEIN_START_Y = ARTIFACT_TY + Math.floor(ARTIFACT_SIZE / 2);
-const CHANNEL_VEIN_ROWS = WORLD_H - CHANNEL_VEIN_START_Y;
 
 // Offscreen canvas for tinting veins (reused each frame)
 const veinTintCanvas = document.createElement('canvas');
@@ -28,8 +25,8 @@ function setTile(x, y, type) {
     world[y * WORLD_W + x] = type;
     // Recompute flow field if solidity changed and flow field is active
     if (flowField && prev !== type) {
-        const wasSolid = (prev === TILE.EARTH || prev === TILE.BRICK || prev === TILE.ARTIFACT || prev === TILE.PEDESTAL);
-        const nowSolid = (type === TILE.EARTH || type === TILE.BRICK || type === TILE.ARTIFACT || type === TILE.PEDESTAL);
+        const wasSolid = (prev === TILE.EARTH || prev === TILE.BRICK || prev === TILE.ARTIFACT);
+        const nowSolid = (type === TILE.EARTH || type === TILE.BRICK || type === TILE.ARTIFACT);
         if (wasSolid !== nowSolid) {
             computeFlowField();
             invalidatePlayerFlowField();
@@ -60,7 +57,7 @@ function terrainNoise(x) {
 }
 
 function getGroundHeight(x) {
-    const center = PEDESTAL_CENTER_X;
+    const center = ARTIFACT_CENTER_X;
     const flatHalf = 6; // 12 tiles flat (6 each side)
     const blendZone = 10; // smooth transition over 10 tiles
     const distFromCenter = Math.abs(x - center);
@@ -91,29 +88,6 @@ function generateWorld() {
         for (let dx = 0; dx < ARTIFACT_SIZE; dx++) {
             setTile(ARTIFACT_TX + dx, ARTIFACT_TY + dy, TILE.ARTIFACT);
         }
-    }
-    // Place pedestal: cone section (widens from 5 to 20 over 15 rows)
-    for (let dy = 0; dy < PEDESTAL_CONE_DEPTH; dy++) {
-        const t = dy / (PEDESTAL_CONE_DEPTH - 1); // 0 at top, 1 at bottom
-        const width = Math.round(PEDESTAL_TOP_W + (PEDESTAL_BOT_W - PEDESTAL_TOP_W) * t);
-        const halfLeft = Math.floor(width / 2);
-        const startX = PEDESTAL_CENTER_X - halfLeft;
-        for (let dx = 0; dx < width; dx++) {
-            setTile(startX + dx, PEDESTAL_CONE_TOP_Y + dy, TILE.PEDESTAL);
-        }
-    }
-    // Place pedestal: column section (20 wide, from bottom of cone to world bottom)
-    const columnStartY = PEDESTAL_CONE_TOP_Y + PEDESTAL_CONE_DEPTH;
-    const columnHalfLeft = Math.floor(PEDESTAL_BOT_W / 2);
-    const columnStartX = PEDESTAL_CENTER_X - columnHalfLeft;
-    for (let y = columnStartY; y < WORLD_H; y++) {
-        for (let dx = 0; dx < PEDESTAL_BOT_W; dx++) {
-            setTile(columnStartX + dx, y, TILE.PEDESTAL);
-        }
-    }
-    // Place 1-wide artifact column from bottom of artifact through pedestal to world bottom
-    for (let y = GROUND_LEVEL; y < WORLD_H; y++) {
-        setTile(PEDESTAL_CENTER_X, y, TILE.ARTIFACT);
     }
 }
 
@@ -155,9 +129,6 @@ function buildChunk(cx, cy) {
                 oc.drawImage(src, 0, 0, src.width, src.height, x * TILE_TEXELS, y * TILE_TEXELS, TILE_TEXELS, TILE_TEXELS);
             } else if (tile === TILE.ARTIFACT) {
                 const src = assets.artifactBase[hash % assets.artifactBase.length];
-                oc.drawImage(src, 0, 0, src.width, src.height, x * TILE_TEXELS, y * TILE_TEXELS, TILE_TEXELS, TILE_TEXELS);
-            } else if (tile === TILE.PEDESTAL) {
-                const src = assets.pedestal[hash % assets.pedestal.length];
                 oc.drawImage(src, 0, 0, src.width, src.height, x * TILE_TEXELS, y * TILE_TEXELS, TILE_TEXELS, TILE_TEXELS);
             }
         }

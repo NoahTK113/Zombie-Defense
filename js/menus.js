@@ -34,6 +34,6 @@ function drawGameOver() {
     ctx.font = '20px Jura, sans-serif';
     ctx.fillStyle = '#ccc';
     ctx.fillText('The artifact was corrupted and you fell in battle.', canvas.width / 2, canvas.height / 2 + 20);
-    ctx.fillText(`Wave: ${wave.number} | Zombies Killed: ${gameState.zombiesKilled} | Survived: ${Math.floor(gameTime)}s`, canvas.width / 2, canvas.height / 2 + 55);
+    ctx.fillText(`Wave: ${gameState.waveNumber} | Zombies Killed: ${gameState.zombiesKilled} | Survived: ${Math.floor(gameTime)}s`, canvas.width / 2, canvas.height / 2 + 55);
     ctx.restore();
 }

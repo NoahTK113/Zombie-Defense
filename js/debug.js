@@ -39,18 +39,19 @@ function handleDebugKeys(e) {
     }
     // F4: Instant start wave
     if (e.code === 'F4') {
-        if (wave.state === 'idle' && !gameState.artifactCorrupted) {
-            startWave();
+        if (gameState.waveState === 'idle' && !gameState.artifactCorrupted) {
+            advanceWave();
         }
     }
     // F5: Skip/start wave
     if (e.code === 'F5') {
-        if (wave.state === 'active') {
+        if (gameState.waveState === 'active') {
             zombies.length = 0;
             wave.zombiesSpawned = wave.zombiesTotal;
-            completeWave();
-        } else if (wave.state === 'idle') {
-            startWave();
+            gameState.waveState = 'idle';
+            playSound('waveComplete');
+        } else if (gameState.waveState === 'idle') {
+            advanceWave();
         }
     }
     // F6: Force respawn
@@ -82,6 +83,10 @@ function handleDebugKeys(e) {
     if (e.code === 'F11') {
         e.preventDefault();
         gameState.debugShowFlowField = !gameState.debugShowFlowField;
+    }
+    // Backquote (`): Toggle melee collider debug overlay
+    if (e.code === 'Backquote') {
+        gameState.debugShowColliders = !gameState.debugShowColliders;
     }
     // Ctrl+S: Save world
     if (e.ctrlKey && e.code === 'KeyS') {

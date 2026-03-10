@@ -4,7 +4,7 @@
 
 function isSolid(tx, ty) {
     const t = tileAt(tx, ty);
-    return t === TILE.EARTH || t === TILE.BRICK || t === TILE.ARTIFACT || t === TILE.PEDESTAL;
+    return t === TILE.EARTH || t === TILE.BRICK || t === TILE.ARTIFACT;
 }
 
 // Step-up: walk up 1-tile ledges without jumping (works for player and zombies)

@@ -325,66 +325,69 @@ function invalidatePlayerFlowField() {
     playerFlowLastTY = -1;
 }
 
-// --- Wave System State ---
+// --- Wave Spawn Operational Data (identity lives in gameState) ---
 const wave = {
-    number: 0,                // current wave (0 = hasn't started yet)
-    state: 'idle',            // 'idle' | 'active' | 'complete'
     zombiesSpawned: 0,        // how many spawned this wave
     zombiesTotal: 0,          // total for this wave
     flyersTotal: 0,           // how many flyers this wave
     flyersSpawned: 0,         // flyers spawned so far
     spawnTimer: 0,            // timer for next spawn
     spawnInterval: 0,         // this wave's spawn interval
-    completeTimer: 0,         // "WAVE COMPLETE" banner duration
-    completeDuration: 3.0,    // seconds the banner shows
-    // Cached per-wave stats per type (set in startWave)
+    // Cached per-wave stats per type (set in initWaveSpawns)
     walker: { hp: ZOMBIE_BASE_HP, minSpeed: 25, maxSpeed: 65, contactDmg: ZOMBIE_CONTACT_DAMAGE, breakDPS: ZOMBIE_BREAK_DPS },
     flyer:  { hp: ZOMBIE_BASE_HP, minSpeed: 25, maxSpeed: 65, contactDmg: ZOMBIE_CONTACT_DAMAGE, breakDPS: ZOMBIE_BREAK_DPS },
 };
 
-function startWave() {
-    wave.number++;
-    wave.state = 'active';
-    playSound('waveStart');
+// Configure spawn counts and cache stats for the current wave number.
+// Called by artifact.js advanceWave() after incrementing gameState.waveNumber.
+function initWaveSpawns() {
+    const n = gameState.waveNumber;
     wave.zombiesSpawned = 0;
-    wave.zombiesTotal = waveZombieCount(wave.number);
+    wave.zombiesTotal = waveZombieCount(n);
     wave.flyersTotal = Math.round(wave.zombiesTotal * WAVE_CONFIG.flyerRatio);
     wave.flyersSpawned = 0;
-    wave.spawnTimer = 0; // spawn first zombie immediately
-    wave.spawnInterval = waveSpawnInterval(wave.number);
+    wave.spawnTimer = 0;
+    wave.spawnInterval = waveSpawnInterval(n);
 
     // Cache walker stats
-    wave.walker.hp = Math.round(waveScaleStat(WAVE_CONFIG.walker.hp, wave.number));
-    const wSpd = waveSpeedRange(wave.number, WAVE_CONFIG.walker.speed);
+    wave.walker.hp = Math.round(waveScaleStat(WAVE_CONFIG.walker.hp, n));
+    const wSpd = waveSpeedRange(n, WAVE_CONFIG.walker.speed);
     wave.walker.minSpeed = wSpd.min;
     wave.walker.maxSpeed = wSpd.max;
-    wave.walker.contactDmg = Math.round(waveScaleStat(WAVE_CONFIG.walker.contactDamage, wave.number));
-    wave.walker.breakDPS = waveScaleStat(WAVE_CONFIG.walker.breakDPS, wave.number);
+    wave.walker.contactDmg = Math.round(waveScaleStat(WAVE_CONFIG.walker.contactDamage, n));
+    wave.walker.breakDPS = waveScaleStat(WAVE_CONFIG.walker.breakDPS, n);
 
     // Cache flyer stats
-    wave.flyer.hp = Math.round(waveScaleStat(WAVE_CONFIG.flyer.hp, wave.number));
-    const fSpd = waveSpeedRange(wave.number, WAVE_CONFIG.flyer.speed);
+    wave.flyer.hp = Math.round(waveScaleStat(WAVE_CONFIG.flyer.hp, n));
+    const fSpd = waveSpeedRange(n, WAVE_CONFIG.flyer.speed);
     wave.flyer.minSpeed = fSpd.min;
     wave.flyer.maxSpeed = fSpd.max;
-    wave.flyer.contactDmg = Math.round(waveScaleStat(WAVE_CONFIG.flyer.contactDamage, wave.number));
-    wave.flyer.breakDPS = waveScaleStat(WAVE_CONFIG.flyer.breakDPS, wave.number);
-}
-
-function completeWave() {
-    wave.state = 'idle'; // immediately ready for next wave
-    playSound('waveComplete');
+    wave.flyer.contactDmg = Math.round(waveScaleStat(WAVE_CONFIG.flyer.contactDamage, n));
+    wave.flyer.breakDPS = waveScaleStat(WAVE_CONFIG.flyer.breakDPS, n);
 }
 
 function updateWaveSystem(dt) {
     if (gameState.gameOver) return;
 
-    if (wave.state === 'active') {
+    if (gameState.waveState === 'active') {
         // Check if wave is complete: all spawned AND all dead/absorbed
         if (wave.zombiesSpawned >= wave.zombiesTotal && zombies.length === 0) {
-            completeWave();
+            playSound('waveComplete');
+            if (gameState.waveAutoAdvance) {
+                // Start countdown to next wave
+                gameState.waveState = 'countdown';
+                gameState.waveCountdown = WAVE_COUNTDOWN_SECONDS;
+            } else {
+                gameState.waveState = 'idle';
+            }
+        }
+    } else if (gameState.waveState === 'countdown') {
+        gameState.waveCountdown -= dt;
+        if (gameState.waveCountdown <= 0) {
+            gameState.waveCountdown = 0;
+            advanceWave();
         }
     }
-    // 'idle' state: waiting for player to start next wave
 }
 
 // Block HP tracking (only stores damaged blocks; undamaged blocks use BLOCK_BASE_HP)
@@ -413,7 +416,7 @@ function damageBlock(tx, ty, dmg) {
 
 function spawnWalker() {
     const side = Math.random() < 0.5 ? -1 : 1;
-    const spawnTX = PEDESTAL_CENTER_X + side * ZOMBIE_SPAWN_DIST;
+    const spawnTX = ARTIFACT_CENTER_X + side * ZOMBIE_SPAWN_DIST;
     if (spawnTX < 1 || spawnTX >= WORLD_W - 1) return;
 
     // Find ground at spawn column
@@ -453,6 +456,8 @@ function spawnWalker() {
         stuckTimer: 0,
         lastProgressX: (spawnTX + 0.5) * TILE_SIZE,
         usePlayerField: false,
+        knockVx: 0,
+        knockVy: 0,
     });
 }
 
@@ -460,7 +465,7 @@ function spawnFlyer() {
     // Spawn in a semicircle shell around artifact, 40 blocks radius, 0°-180°
     const radius = 40 * TILE_SIZE;
     const artifactCY = (GROUND_LEVEL - ARTIFACT_SIZE) * TILE_SIZE;
-    const centerX = (PEDESTAL_CENTER_X + 0.5) * TILE_SIZE;
+    const centerX = (ARTIFACT_CENTER_X + 0.5) * TILE_SIZE;
     // Bias spawn angle toward sides (0=right, PI=left) rather than overhead
     // Map uniform random to a distribution weighted toward 0 and PI
     const t = Math.random();
@@ -501,6 +506,8 @@ function spawnFlyer() {
         absorbImmunity: 0,
         breakTarget: null,
         usePlayerField: false,
+        knockVx: 0,
+        knockVy: 0,
     });
 }
 
@@ -570,7 +577,7 @@ function resolveZombieY(z) {
 // Soft wall penalty for flyers: detect penetration into solid tiles
 // and apply outward acceleration instead of snapping position.
 // Returns true if any wall contact was detected.
-const FLYER_WALL_MULT = 1.2; // penalty accel = this * zombie's own accel
+// FLYER_WALL_MULT now lives in constants.js
 function applyFlyerWallPenalty(z, dt) {
     const accel = z.speed / 0.15;
     const penaltyAccel = accel * FLYER_WALL_MULT;
@@ -612,11 +619,13 @@ function applyFlyerWallPenalty(z, dt) {
             const minPenYVal = Math.min(penT, penB);
 
             // Push along the axis with least penetration
-            // Zero velocity on that axis first to prevent trampoline effect
+            // Zero velocity + knockback on that axis to prevent phasing
             if (minPenXVal < minPenYVal) {
                 z.vx = minPenX * penaltyAccel * dt;
+                z.knockVx = 0;
             } else {
                 z.vy = minPenY * penaltyAccel * dt;
+                z.knockVy = 0;
             }
         }
     }
@@ -683,7 +692,7 @@ function resolveZombieCollisions() {
         const pcx = player.x, pcy = player.y - player.h / 2;
 
         for (const z of zombies) {
-            if (z.state === 'absorbing') continue;
+            // NOTE: absorbing zombies still collide with player (do NOT skip them)
             const zx = z.x, zy = z.y - z.h / 2;
             const dx = zx - pcx;
             const dy = zy - pcy;
@@ -745,7 +754,7 @@ function resolveZombieCollisions() {
 function isBlockedByZombie(z, dir) {
     const cx = z.x;
     const cy = z.y - z.h / 2;
-    const artifactCX = (PEDESTAL_CENTER_X + 0.5) * TILE_SIZE;
+    const artifactCX = (ARTIFACT_CENTER_X + 0.5) * TILE_SIZE;
     const nearCenter = Math.abs(cx - artifactCX) < 10 * TILE_SIZE;
     const scanRange = nearCenter ? 30 : 17;
 
@@ -805,7 +814,7 @@ function zombieTouchesArtifact(z) {
 
 function updateZombies(dt) {
     // Wave-gated spawning (only during active wave)
-    if (!gameState.debugSpawnDisabled && wave.state === 'active' && wave.zombiesSpawned < wave.zombiesTotal) {
+    if (!gameState.debugSpawnDisabled && gameState.waveState === 'active' && wave.zombiesSpawned < wave.zombiesTotal) {
         wave.spawnTimer += dt;
         if (wave.spawnTimer >= wave.spawnInterval) {
             wave.spawnTimer -= wave.spawnInterval;
@@ -816,7 +825,7 @@ function updateZombies(dt) {
         }
     }
 
-    const artifactCX = (PEDESTAL_CENTER_X + 0.5) * TILE_SIZE;
+    const artifactCX = (ARTIFACT_CENTER_X + 0.5) * TILE_SIZE;
 
     // Recompute player flow field if player moved to a new tile
     if (!player.dead) {
@@ -969,6 +978,18 @@ function updateZombies(dt) {
             }
             z.facingRight = z.vx > 0 || (z.vx === 0 && z.facingRight);
 
+            // Apply knockback displacement (decayed by zombie's own acceleration)
+            z.x += z.knockVx * dt;
+            z.y += z.knockVy * dt;
+            // Hard resolve so flyers don't get stuck in terrain from knockback
+            applyFlyerWallPenalty(z, dt);
+            const knockSpd = Math.sqrt(z.knockVx * z.knockVx + z.knockVy * z.knockVy);
+            if (knockSpd > 0) {
+                const decay = accel * dt;
+                if (knockSpd <= decay) { z.knockVx = 0; z.knockVy = 0; }
+                else { const s = (knockSpd - decay) / knockSpd; z.knockVx *= s; z.knockVy *= s; }
+            }
+
             // Move and apply soft wall penalty (no hard position snap)
             z.x += z.vx * dt;
             z.y += z.vy * dt;
@@ -1030,6 +1051,20 @@ function updateZombies(dt) {
 
         // Gravity
         z.vy += GRAVITY * dt;
+
+        // Apply knockback displacement (decayed by zombie's own acceleration)
+        const walkerAccel = z.speed / 0.5;
+        z.x += z.knockVx * dt;
+        z.y += z.knockVy * dt;
+        // Resolve knockback against walls so zombies don't get stuck in terrain
+        resolveZombieX(z);
+        resolveZombieY(z);
+        const knockSpd = Math.sqrt(z.knockVx * z.knockVx + z.knockVy * z.knockVy);
+        if (knockSpd > 0) {
+            const decay = walkerAccel * dt;
+            if (knockSpd <= decay) { z.knockVx = 0; z.knockVy = 0; }
+            else { const s = (knockSpd - decay) / knockSpd; z.knockVx *= s; z.knockVy *= s; }
+        }
 
         // Move horizontally, resolve against walls
         z.x += z.vx * dt;
@@ -1110,7 +1145,7 @@ function updateZombies(dt) {
                 }
             } else if (action === 'jump') {
                 const frontTile = tileAt(frontCol, feetRow);
-                const nearArtifact = frontTile === TILE.ARTIFACT || frontTile === TILE.PEDESTAL
+                const nearArtifact = frontTile === TILE.ARTIFACT
                     || Math.abs(z.x - artifactCX) < ARTIFACT_SIZE * TILE_SIZE;
                 z.vy = nearArtifact ? -450 : -350;
                 z.onGround = false;

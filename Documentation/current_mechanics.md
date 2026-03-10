@@ -85,7 +85,6 @@ Plain language reference for every gameplay system as it exists in code today. N
 - **EARTH** — natural terrain, solid, diggable (100 HP)
 - **BRICK** — player-placed block, solid (150 HP)
 - **ARTIFACT** — artifact body tiles, solid, indestructible
-- **PEDESTAL** — artifact support structure, solid, indestructible
 
 ### Chunk System
 - Chunks: 32 × 32 tiles each, forming a 20 × 7 grid
@@ -98,15 +97,11 @@ Plain language reference for every gameplay system as it exists in code today. N
 ## 4. Artifact
 
 ### Structure
-- 5 × 5 tile body, centered horizontally at tile 320
+- 5 × 5 tile body, centered horizontally at tile 320 (`ARTIFACT_CENTER_X`)
 - Sits on ground level (row 65–69)
 - Dark blue tiles with animated fractal vein pattern
 - Veins shift color: blue when healthy, toward red when damaged
-
-### Pedestal
-- Cone shape: 5 tiles wide at top, expanding 1 tile per row for 18 rows
-- Below the cone: 20-tile-wide column extending to the world floor
-- All pedestal tiles are indestructible
+- No pedestal or support structure — artifact sits directly on terrain
 
 ### Interaction
 - Must be within ~7 tiles of artifact center to interact (E key)
@@ -121,7 +116,10 @@ Plain language reference for every gameplay system as it exists in code today. N
 Three clickable options arranged around the artifact:
 - **Build Mode** (top) — enters build mode, shows KJ balance
 - **Crafting** (bottom-left) — opens the crafting grid
-- **Open the Conduit** (bottom-right) — starts the next wave (only available when idle and not corrupted)
+- **Conduit** (bottom-right) — wave control (available when not corrupted). Label changes dynamically:
+  - "Advance State" — first use, starts wave 1 with auto-advance enabled
+  - "Resume Advance" — resumes auto-advance (when idle or when active with auto-advance off)
+  - "Pause Advance" — pauses auto-advance (when counting down or when active with auto-advance on)
 
 ### Health
 - Max HP: 1000
@@ -155,11 +153,11 @@ Triggers when artifact HP drops to 0:
 ### Placement Rules
 - Place BRICK blocks on any AIR tile — costs 50 KJ
 - Cannot place on tiles occupied by the player
-- Cannot place on ARTIFACT or PEDESTAL tiles
+- Cannot place on ARTIFACT tiles
 
 ### Digging
 - Dig EARTH tiles — costs 50 KJ
-- Cannot dig ARTIFACT, PEDESTAL, or BRICK tiles (brick can only be dug — same 50 KJ cost)
+- Cannot dig ARTIFACT or BRICK tiles (brick can only be dug — same 50 KJ cost)
 - Destroyed blocks are gone permanently (until world reload)
 
 ### Controls
@@ -361,9 +359,15 @@ Each zombie gets a randomized speed within its wave's min–max range.
 - Wave counter starts at 0, increments on start
 
 ### Progression
-- States: idle → active → idle
+- States: `idle` → `active` → `countdown` → `active` (loop while auto-advance on)
 - Wave ends when all zombies for that wave have been spawned AND killed/absorbed
-- No automatic delay between waves — player initiates each one
+- **Auto-advance**: enabled by default when player first clicks Conduit to start wave 1
+  - On wave completion: enters `countdown` state with 15-second timer
+  - Timer reaches 0: next wave starts automatically via `advanceWave()`
+  - Player can toggle auto-advance on/off via Conduit circle at any time
+  - If auto-advance is off when a wave completes, state goes to `idle` instead of `countdown`
+- Wave identity (`waveNumber`, `waveState`, `waveAutoAdvance`, `waveCountdown`) lives in `gameState`
+- Wave operational data (spawn counts, timers, per-wave stats) lives in the `wave` object in zombies.js
 
 ### Spawn Timing
 - First zombie: immediate
@@ -475,10 +479,13 @@ Player cannot move during the intro. Tutorial step tracking begins on completion
 ## 15. HUD
 
 ### Elements (visible after intro)
-- **KJ Counter** — center-left, cyan text, "XXX KJ" (22px bold Jura). Appears after first artifact interaction.
-- **Round Number** — below KJ counter, "Round X" (16px Jura, 0.7 opacity)
-- **Weapon Display** — lower-left, shows shovel pictogram or crafted weapon sprite
-- **Weapon Slot** — current/total indicator when multiple weapons exist
+- **KJ Counter** — center-left, cyan text, "XXX KJ" (24px bold Jura). Appears after first artifact interaction.
+- **Reactor State** — below KJ counter, "Reactor State = X" (18px bold Jura, cyan)
+- **Wave Status** — below reactor state (18px bold Jura):
+  - During countdown: "State Advancement Complete" + "Next Advancement in Xs" (two lines, warm yellow)
+  - During active wave: "State Advancement Active" (red, 0.7 opacity)
+- **Weapon Display** — bottom-left corner (30px margin), shows shovel pictogram or crafted weapon sprite (18px bold Jura)
+- **Weapon Slot** — current/total indicator when multiple weapons exist (13px Jura)
 - **Controls Button** — upper-right "?" icon
 
 ### Controls Panel

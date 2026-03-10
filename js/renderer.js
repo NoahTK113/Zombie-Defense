@@ -155,8 +155,9 @@ function draw() {
     const viewW = canvas.width / effectiveZoom;
     const viewH = canvas.height / effectiveZoom;
 
-    const camX = camera.x;
-    const camY = camera.y;
+    const shake = getScreenShakeOffset();
+    const camX = camera.x + shake.x;
+    const camY = camera.y + shake.y;
 
     // Artifact damage ratio and vein colors (computed early for star tinting)
     const artifactDmgRatio = 1 - gameState.artifactHP / ARTIFACT_MAX_HP;
@@ -171,7 +172,7 @@ function draw() {
             starR = Math.round(255 - (255 - veinR) * artifactDmgRatio * 0.3);
             starG = Math.round(255 - (255 - veinG) * artifactDmgRatio);
             starB = Math.round(255 - (255 - veinB) * artifactDmgRatio);
-        } else if (wave.state === 'active') {
+        } else if (gameState.waveState === 'active') {
             starR = 140; starG = 180; starB = 255;
         } else {
             starR = 255; starG = 255; starB = 255;
@@ -273,48 +274,6 @@ function draw() {
                 const glowAlpha = 0.05 + 0.1 * (0.5 + 0.5 * Math.sin(gameTime * 1.5));
                 ctx.fillStyle = `rgba(${veinR}, ${veinG}, ${veinB}, ${glowAlpha.toFixed(3)})`;
                 ctx.fillRect(sx, sy, sw, sh);
-            }
-        }
-    }
-
-    // Draw channel energy vein (same tint as artifact veins)
-    {
-        const veinWorldX = PEDESTAL_CENTER_X * TILE_SIZE;
-        const veinWorldY = CHANNEL_VEIN_START_Y * TILE_SIZE;
-        const sx = Math.round((veinWorldX - camX) * effectiveZoom);
-        const sy = Math.round((veinWorldY - camY) * effectiveZoom);
-        const sw = Math.round(TILE_SIZE * effectiveZoom);
-        const sh = Math.round(CHANNEL_VEIN_ROWS * TILE_SIZE * effectiveZoom);
-        if (sx + sw > 0 && sx < canvas.width && sy + sh > 0 && sy < canvas.height) {
-            if (gameState.artifactCorrupted) {
-                veinTintCanvas.width = assets.channelVeins.width;
-                veinTintCanvas.height = assets.channelVeins.height;
-                veinTintCtx.clearRect(0, 0, veinTintCanvas.width, veinTintCanvas.height);
-                for (let ox = -1; ox <= 1; ox++) {
-                    for (let oy = -1; oy <= 1; oy++) {
-                        veinTintCtx.drawImage(assets.channelVeins, ox, oy);
-                    }
-                }
-                veinTintCtx.globalCompositeOperation = 'source-in';
-                veinTintCtx.fillStyle = `rgb(${veinR}, ${veinG}, ${veinB})`;
-                veinTintCtx.fillRect(0, 0, veinTintCanvas.width, veinTintCanvas.height);
-                veinTintCtx.globalCompositeOperation = 'source-over';
-                ctx.drawImage(veinTintCanvas, sx, sy, sw, sh);
-            } else {
-                const p1 = 0.3 + 0.7 * (0.5 + 0.5 * Math.sin(gameTime * 2.0));
-                const p2 = 0.5 + 0.5 * (0.5 + 0.5 * Math.sin(gameTime * 1.3 + 1.0));
-                const veinAlpha = p1 * p2;
-                veinTintCanvas.width = assets.channelVeins.width;
-                veinTintCanvas.height = assets.channelVeins.height;
-                veinTintCtx.clearRect(0, 0, veinTintCanvas.width, veinTintCanvas.height);
-                veinTintCtx.drawImage(assets.channelVeins, 0, 0);
-                veinTintCtx.globalCompositeOperation = 'source-in';
-                veinTintCtx.fillStyle = `rgb(${veinR}, ${veinG}, ${veinB})`;
-                veinTintCtx.fillRect(0, 0, veinTintCanvas.width, veinTintCanvas.height);
-                veinTintCtx.globalCompositeOperation = 'source-over';
-                ctx.globalAlpha = veinAlpha;
-                ctx.drawImage(veinTintCanvas, sx, sy, sw, sh);
-                ctx.globalAlpha = 1.0;
             }
         }
     }
@@ -493,23 +452,29 @@ function draw() {
 
         // Draw weapon (only during swing)
         if (gameState.gameMode === 'player' && shovelSwingTimer > 0) {
-            const handX = px + (aimingRight ? pw * 0.8 : pw * 0.2);
+            // Pivot at player center-shoulder (matches combat.js)
+            const handX = px + pw * 0.5;
             const handY = py + ph * 0.55;
             const weapon = getActiveWeapon();
 
             ctx.save();
             ctx.translate(handX, handY);
 
-            // 180° swing: straight up → forward → straight down
+            // Directional swing with inertia: hermite easing, arc centered on aim
             const progress = 1 - shovelSwingTimer / meleeSwingDuration;
-            const dir = shovelSwingDir;
-            const startAngle = dir > 0 ? -Math.PI : Math.PI;
-            const endAngle = 0;
-            const angle = startAngle + (endAngle - startAngle) * progress;
+            const canvasAim = meleeAimAngle - Math.PI / 2;
+            const halfArc = MELEE_SWING_ARC / 2;
+            const startAngle = meleeSwingCW ? canvasAim - halfArc : canvasAim + halfArc;
+            const endAngle = meleeSwingCW ? canvasAim + halfArc : canvasAim - halfArc;
+            const easedProgress = swingEase(progress);
+            const angle = startAngle + (endAngle - startAngle) * easedProgress;
             ctx.rotate(angle);
 
-            // Arm-length offset: push weapon outward from pivot as if held at arm's length
-            const armOffset = 1.0 * TILE_SIZE * effectiveZoom;
+            // Grip offset: weapon extends to meleeGripDist from pivot (choke-up support)
+            const armOffsetBase = 1.0 * TILE_SIZE;
+            const fullTip = armOffsetBase + weapon.colliderOffset * TILE_SIZE + weapon.colliderHeight * TILE_SIZE;
+            const chokeShift = (fullTip - meleeGripDist) * effectiveZoom;
+            const armOffset = armOffsetBase * effectiveZoom - chokeShift;
             ctx.translate(0, armOffset);
 
             if (weapon.sprite && weapon.sprite.complete) {
@@ -541,8 +506,28 @@ function draw() {
     }
     }
 
+    // --- Swing trail ---
+    drawSwingTrail(ctx, camX, camY, effectiveZoom);
+
     // --- Lighting overlay ---
     drawLighting(camX, camY, effectiveZoom);
+
+    // --- Debug: Melee collider overlay ---
+    if (gameState.debugShowColliders && debugCollider) {
+        ctx.save();
+        const dc = debugCollider;
+        const sx = (dc.cx - camX) * effectiveZoom;
+        const sy = (dc.cy - camY) * effectiveZoom;
+        ctx.translate(sx, sy);
+        ctx.rotate(dc.angle);
+        ctx.strokeStyle = '#ff0000';
+        ctx.lineWidth = 2;
+        ctx.globalAlpha = 0.8;
+        ctx.strokeRect(-dc.halfW * effectiveZoom, -dc.halfH * effectiveZoom, dc.halfW * 2 * effectiveZoom, dc.halfH * 2 * effectiveZoom);
+        ctx.fillStyle = 'rgba(255, 0, 0, 0.15)';
+        ctx.fillRect(-dc.halfW * effectiveZoom, -dc.halfH * effectiveZoom, dc.halfW * 2 * effectiveZoom, dc.halfH * 2 * effectiveZoom);
+        ctx.restore();
+    }
 
     // Damage vignette
     if (player.damageFlash > 0) {
@@ -572,7 +557,7 @@ function draw() {
     if (artifactPulse > 0) {
         const pulseIntensity = Math.min(1, artifactPulse);
         const pr = artifactPulseColor[0], pg = artifactPulseColor[1], pb = artifactPulseColor[2];
-        const artSX = ((PEDESTAL_CENTER_X + 0.5) * TILE_SIZE - camX) * effectiveZoom;
+        const artSX = ((ARTIFACT_CENTER_X + 0.5) * TILE_SIZE - camX) * effectiveZoom;
         const artSY = ((ARTIFACT_TY + ARTIFACT_SIZE / 2) * TILE_SIZE - camY) * effectiveZoom;
         const maxR = Math.sqrt(canvas.width * canvas.width + canvas.height * canvas.height);
         const ringProgress = 1 - pulseIntensity;
@@ -646,7 +631,7 @@ function draw() {
         ctx.textAlign = 'center';
         const pulse = 0.5 + 0.5 * Math.sin(gameTime * 3);
         ctx.fillStyle = `rgba(200, 220, 255, ${pulse.toFixed(2)})`;
-        ctx.fillText('Press Tab to open comms', canvas.width / 2, 80);
+        ctx.fillText('Press C to open comms', canvas.width / 2, 80);
         ctx.restore();
     }
 
@@ -775,7 +760,7 @@ function draw() {
             ctx.textAlign = 'center';
             ctx.font = '11px monospace';
             ctx.fillStyle = '#444444';
-            ctx.fillText('Tab to close', tabX + tabW / 2, tabY + tabH - 12);
+            ctx.fillText('C to close', tabX + tabW / 2, tabY + tabH - 12);
         }
 
         ctx.restore();
@@ -790,7 +775,7 @@ function draw() {
         ctx.font = `${Math.max(8, Math.round(12 * effectiveZoom))}px monospace`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        const artCX = PEDESTAL_CENTER_X;
+        const artCX = ARTIFACT_CENTER_X;
         const artCY = ARTIFACT_TY + Math.floor(ARTIFACT_SIZE / 2);
         const range = 30;
         const minTX = Math.max(0, artCX - range);
@@ -913,7 +898,7 @@ function draw() {
     ctx.textAlign = 'right';
     ctx.fillStyle = '#00ff44';
     const dbx = canvas.width - 10;
-    ctx.fillText(`[F1] Skip Intro  [F2] Skip Comms  [F3] Skip Artifact  [F4] Start Wave  [F5] Wave Skip  [F6] Respawn  [F7] Restore  [F8] Target: ${gameState.debugNoTargetPlayer ? 'OFF' : 'ON'}  [F9] Clear Weapons  [F10] +1000 KJ  [F11] FlowField: ${gameState.debugShowFlowField ? 'ON' : 'OFF'}  [Ctrl+S] Save  [Ctrl+L] Load`, dbx, canvas.height - 10);
+    ctx.fillText(`[F1] Skip Intro  [F2] Skip Comms  [F3] Skip Artifact  [F4] Start Wave  [F5] Wave Skip  [F6] Respawn  [F7] Restore  [F8] Target: ${gameState.debugNoTargetPlayer ? 'OFF' : 'ON'}  [F9] Clear Weapons  [F10] +1000 KJ  [F11] FlowField: ${gameState.debugShowFlowField ? 'ON' : 'OFF'}  [\`] Colliders: ${gameState.debugShowColliders ? 'ON' : 'OFF'}  [Ctrl+S] Save  [Ctrl+L] Load`, dbx, canvas.height - 10);
     ctx.restore();
 
     // --- Dark background for boot text and circles fadein ---
@@ -949,7 +934,7 @@ function draw() {
         // Get circle positions (triangular: 1 top, 2 bottom)
         const uiCircles = getArtifactUICircles();
         const t = gameTime;
-        const conduitAvailable = wave.state === 'idle' && !gameState.artifactCorrupted;
+        const conduitAvailable = !gameState.artifactCorrupted;
         const isFadingIn = artifactUI.flashPhase === 'circles_fadein';
 
         // Staggered fade-in: circle 0 at 0s, circle 1 at 0.8s, circle 2 at 1.6s, each takes 1.2s
@@ -1004,11 +989,22 @@ function draw() {
             else drawFeynmanAnnihilation(ctx, c.x, c.y, dr);
 
             // Label above circle
-            const labels = ['Build', 'Craft', 'Advance State'];
+            let label;
+            if (i === 0) label = 'Build';
+            else if (i === 1) label = 'Craft';
+            else {
+                // Conduit label changes based on state
+                if (gameState.waveState === 'idle' && gameState.waveNumber === 0) label = 'Advance State';
+                else if (gameState.waveState === 'idle') label = 'Resume Advance';
+                else if (gameState.waveState === 'countdown') label = 'Pause Advance';
+                else if (gameState.waveState === 'active' && gameState.waveAutoAdvance) label = 'Pause Advance';
+                else if (gameState.waveState === 'active') label = 'Resume Advance';
+                else label = 'Advance State';
+            }
             ctx.font = '22px Jura, sans-serif';
             ctx.fillStyle = `rgba(100, 210, 255, ${baseAlpha.toFixed(2)})`;
             ctx.textAlign = 'center';
-            ctx.fillText(labels[i], c.x, c.y - c.r - 24);
+            ctx.fillText(label, c.x, c.y - c.r - 24);
         }
 
         ctx.globalAlpha = 1.0;
@@ -1076,7 +1072,7 @@ function draw() {
             }
         } else {
             // Subsequent opens: persistent status lines
-            const currentWave = (wave && wave.number) ? wave.number : 0;
+            const currentWave = gameState.waveNumber || 0;
             ctx.fillText('Mass-Energy Reassignment Reactor', bootX, bootY);
             ctx.fillText('Device ID #004.2', bootX, bootY + bootLineH);
             ctx.fillText(`E = ${Math.floor(gameState.points)} KJ`, bootX, bootY + bootLineH * 2);

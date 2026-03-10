@@ -41,6 +41,18 @@ function getArtifactUICircles() {
     ];
 }
 
+// Advance to next wave: increment number, set active, init spawns.
+// Artifact owns wave initiation; zombies just reads gameState.waveNumber.
+const WAVE_COUNTDOWN_SECONDS = 15;
+
+function advanceWave() {
+    gameState.waveNumber++;
+    gameState.waveState = 'active';
+    gameState.waveCountdown = 0;
+    initWaveSpawns();
+    playSound('waveStart');
+}
+
 function artifactUISelectCircle(index) {
     if (index === 0) {
         // Build mode
@@ -54,17 +66,32 @@ function artifactUISelectCircle(index) {
         artifactUI.hovered = -1;
         gameState.craftingOpen = true;
     } else if (index === 2) {
-        // Conduit - start wave
-        if (wave.state === 'idle' && !gameState.artifactCorrupted) {
+        // Conduit - wave advancement
+        if (gameState.artifactCorrupted) return;
+        if (gameState.waveState === 'idle') {
+            // Start first wave or resume auto-advance
             artifactUI.open = false;
             artifactUI.hovered = -1;
-            startWave();
+            gameState.waveAutoAdvance = true;
+            advanceWave();
+        } else if (gameState.waveState === 'countdown') {
+            // Pause auto-advance
+            artifactUI.open = false;
+            artifactUI.hovered = -1;
+            gameState.waveAutoAdvance = false;
+            gameState.waveState = 'idle';
+            gameState.waveCountdown = 0;
+        } else if (gameState.waveState === 'active') {
+            // Toggle auto-advance off during active wave
+            artifactUI.open = false;
+            artifactUI.hovered = -1;
+            gameState.waveAutoAdvance = !gameState.waveAutoAdvance;
         }
     }
 }
 
 function isNearArtifact() {
-    const artifactCX = (PEDESTAL_CENTER_X + 0.5) * TILE_SIZE;
+    const artifactCX = (ARTIFACT_CENTER_X + 0.5) * TILE_SIZE;
     const artifactCY = (ARTIFACT_TY + ARTIFACT_SIZE / 2) * TILE_SIZE;
     const dx = player.x - artifactCX;
     const dy = (player.y - player.h / 2) - artifactCY;

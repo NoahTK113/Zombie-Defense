@@ -110,7 +110,7 @@ function craftRecalcLayout() {
 
 // --- Helpers ---
 function craftGetAvailableMaterials() {
-    const currentWave = (wave && wave.number) ? wave.number : 0;
+    const currentWave = gameState.waveNumber || 0;
     return CRAFT_MATERIALS.filter(m => m.unlockWave <= currentWave);
 }
 
@@ -299,6 +299,7 @@ function craftSaveWeapon() {
         range: craft.exportedWeapon.range,
         weight: craft.exportedWeapon.weight,
         swingWeight: craft.exportedWeapon.swingWeight,
+        knockback: craft.exportedWeapon.knockback,
         hasHandle: craft.exportedWeapon.hasHandle,
         visualHeight,
         colliderWidth: craft.exportedWeapon.colliderWidth,
@@ -535,6 +536,7 @@ function craftAnalyzeGrid() {
     const damage = Math.round(hasHandle ? rawDamage * 1.25 : rawDamage);
     const swingDuration = (0.08 + 0.05 * Math.sqrt(swingWeight)) * (hasHandle ? 0.75 : 1.0);
     const speed = Math.round(swingDuration * 100) / 100;
+    const knockback = Math.round(MELEE_KNOCKBACK_COEFF * Math.sqrt(swingWeight) * range);
 
     const clubWidth = (orientation === 'top' || orientation === 'bottom') ? bboxCols : bboxRows;
     const colliderWidth = Math.round(clubWidth * CRAFT_TILES_PER_CELL * 100) / 100;
@@ -550,6 +552,7 @@ function craftAnalyzeGrid() {
         swingWeight: Math.round(swingWeight * 100) / 100,
         hasHandle,
         damage,
+        knockback,
         speed: Math.round(speed * 100) / 100,
         range: Math.round(range * 100) / 100,
         colliderWidth,
@@ -1573,17 +1576,19 @@ function drawCrafting() {
             ctx.fillText(`Weight: ${craft.weaponResult.weight}`, sx, sy + 98);
             ctx.fillText(`Swing weight: ${craft.weaponResult.swingWeight}`, sx, sy + 116);
             ctx.fillText(`Damage: ${craft.weaponResult.damage}`, sx, sy + 138);
-            ctx.fillText(`Swing: ${craft.weaponResult.speed}s`, sx, sy + 156);
-            ctx.fillText(`Range: ${craft.weaponResult.range}`, sx, sy + 174);
-            ctx.fillText(`Collider: ${craft.weaponResult.colliderWidth} x ${craft.weaponResult.colliderHeight} +${craft.weaponResult.colliderOffset}`, sx, sy + 192);
+            ctx.fillText(`Knockback: ${craft.weaponResult.knockback}`, sx, sy + 156);
+            const effectiveSwing = Math.max(MELEE_MIN_SWING_DURATION, craft.weaponResult.speed * MELEE_SWING_SPEED_MULT);
+            ctx.fillText(`Swing: ${Math.round(effectiveSwing * 100) / 100}s`, sx, sy + 174);
+            ctx.fillText(`Range: ${craft.weaponResult.range}`, sx, sy + 192);
+            ctx.fillText(`Collider: ${craft.weaponResult.colliderWidth} x ${craft.weaponResult.colliderHeight} +${craft.weaponResult.colliderOffset}`, sx, sy + 210);
 
             if (!craft.weaponResult.hasHandle) {
                 ctx.font = '12px Jura, sans-serif';
                 ctx.fillStyle = 'rgba(255, 200, 100, 0.6)';
-                ctx.fillText('Add composite at end', sx, sy + 218);
-                ctx.fillText('for +25% dmg, -25% swing time', sx, sy + 234);
+                ctx.fillText('Add composite at end', sx, sy + 236);
+                ctx.fillText('for +25% dmg, -25% swing time', sx, sy + 252);
             }
-            statsEndY = sy + (craft.weaponResult.hasHandle ? 200 : 240);
+            statsEndY = sy + (craft.weaponResult.hasHandle ? 218 : 258);
         }
 
         // Export button

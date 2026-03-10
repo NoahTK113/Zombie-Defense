@@ -15,7 +15,6 @@ const TILE = {
     EARTH: 1,
     BRICK: 2,
     ARTIFACT: 3,
-    PEDESTAL: 4,
 };
 
 // Artifact constants
@@ -23,13 +22,7 @@ const ARTIFACT_SIZE = 5; // tiles
 const ARTIFACT_PX = ARTIFACT_SIZE * TILE_SIZE;
 const ARTIFACT_TX = Math.floor(WORLD_W / 2) - 2; // tile x start
 const ARTIFACT_TY = GROUND_LEVEL - ARTIFACT_SIZE; // tile y start
-
-// Pedestal constants
-const PEDESTAL_CENTER_X = ARTIFACT_TX + Math.floor(ARTIFACT_SIZE / 2); // tile 320
-const PEDESTAL_TOP_W = ARTIFACT_SIZE; // 5, matches artifact width
-const PEDESTAL_BOT_W = 40;
-const PEDESTAL_CONE_DEPTH = 18; // rows the cone spans (1:1 slope from 5 to 40)
-const PEDESTAL_CONE_TOP_Y = GROUND_LEVEL; // starts right below artifact
+const ARTIFACT_CENTER_X = ARTIFACT_TX + Math.floor(ARTIFACT_SIZE / 2); // tile 320
 
 // Lighting constants (tunable)
 const LIGHT_RADIUS = 25;     // tiles - full bright zone around artifact
@@ -50,6 +43,7 @@ const ZOMBIE_BREAK_DPS = 33;          // damage per second when attacking blocks
 const BLOCK_BASE_HP = { [TILE.EARTH]: 100, [TILE.BRICK]: 150 }; // HP per block type
 const ZOMBIE_BASE_HP = 150;             // base zombie hit points
 const ZOMBIE_KNOCKBACK = 36;            // pixels/sec impulse on bullet hit
+const FLYER_WALL_MULT = 1.8;           // soft wall penalty: penaltyAccel = flyerAccel * this
 
 // Shooting constants (tunable)
 const PISTOL_FIRE_RATE = 0.067;         // seconds between shots (3x faster)
@@ -62,17 +56,17 @@ const PISTOL_PENETRATION = 2;           // number of zombies a bullet can hit
 const PLAYER_MAX_HP = 100;              // player max health
 const ZOMBIE_CONTACT_DAMAGE = 30;       // damage per zombie touch
 const PLAYER_INVULN_TIME = 0.2;         // seconds of invulnerability after hit
-const PLAYER_DAMAGE_KNOCKBACK = 200;    // pixels/sec knockback impulse when hit
+const PLAYER_DAMAGE_KNOCKBACK = 50;    // pixels/sec knockback impulse when hit
 const PLAYER_RESPAWN_TIME = 10;         // seconds to respawn after death
 
 // Artifact health
-const ARTIFACT_MAX_HP = 1000;
+const ARTIFACT_MAX_HP = 200;
 const ARTIFACT_ABSORB_DAMAGE = 100;     // damage per zombie absorbed
-const ARTIFACT_REGEN = 20;              // HP/sec regen (4x)
+const ARTIFACT_REGEN = 5;              // HP/sec regen (4x)
 
 // Death particle constants
-const DEATH_PARTICLE_COUNT = 8;         // pieces per zombie death
-const DEATH_PARTICLE_LIFE = 0.8;        // seconds particles live
+const DEATH_PARTICLE_COUNT = 14;         // pieces per zombie death
+const DEATH_PARTICLE_LIFE = 1.5;        // seconds particles live
 
 // Physics
 const GRAVITY = 800; // pixels/sec^2
@@ -80,7 +74,7 @@ const INTRO_SPAWN_OFFSET = 250; // tiles to the right of artifact (near world ed
 
 // Camera zoom limits
 const MIN_ZOOM_BUILD = 0.65;
-const MIN_ZOOM_PLAYER = 1.25;
+const MIN_ZOOM_PLAYER = 1.7;
 const MAX_ZOOM = 3.0;
 
 // ============================================================
@@ -99,7 +93,7 @@ const WAVE_CONFIG = {
     // --- Spawn Rate ---
     baseSpawnInterval: 2.5,          // seconds between spawns in wave 1
     minSpawnInterval: 0.4,           // fastest possible spawn rate
-    spawnIntervalDecay: 0.12,        // seconds faster per wave
+    spawnIntervalDecay: 0.3,        // seconds faster per wave
 
     // --- Walker Stats ---
     walker: {
@@ -135,8 +129,8 @@ const WAVE_CONFIG = {
             power: 1.15,
         },
         speed: {
-            baseMin: 50,
-            baseMax: 130,
+            baseMin: 30,
+            baseMax: 40,
             minGrowth: 9,
             maxGrowth: 15,
             absoluteMax: 420,
@@ -155,12 +149,21 @@ const WAVE_CONFIG = {
 };
 
 // Shovel (starting melee weapon)
-const SHOVEL_DAMAGE = 15;             // damage to zombies per swing (2 hits to kill wave 1)
+const SHOVEL_DAMAGE = 40;             // damage to zombies per swing (2 hits to kill wave 1)
 const SHOVEL_BLOCK_DAMAGE = 50;       // damage to blocks per swing (earth=2 hits, brick=3)
 const SHOVEL_SWING_DURATION = 0.3;    // seconds for swing animation
 const SHOVEL_COOLDOWN = 0;            // no cooldown, swing duration is the full cycle
 const SHOVEL_RANGE = 2.5;             // tiles ahead of player
-const SHOVEL_KNOCKBACK = 180;         // pixels/sec knockback on zombie hit
+const SHOVEL_SWING_WEIGHT = 19.4;     // moment of inertia (back-derived from swing duration)
+const MELEE_KNOCKBACK_COEFF = 22;     // tunable: knockback = coeff * sqrt(swingWeight) * range
+const MELEE_COLLIDER_TIP_BUFFER = 0.3; // tiles - fixed extension past weapon tip
+const MELEE_HIT_PADDING = 8;           // px - expands zombie AABB for melee hit detection only (0=4px inside skin)
+const MELEE_SWING_SPEED_MULT = 0.7;    // global swing duration multiplier (lower = faster)
+const MELEE_MIN_SWING_DURATION = 0.15; // seconds - floor so tiny weapons aren't instant
+const MELEE_SWING_ARC = 230 * Math.PI / 180; // total swing arc in radians (230°)
+const MELEE_SAME_DIR_COOLDOWN = 1.0;   // multiplier on swing duration for same-direction cooldown
+const SCREEN_SHAKE_INTENSITY = 3;      // pixels - max random offset per axis on melee hit
+const SCREEN_SHAKE_DURATION = 0.12;    // seconds - how long shake lasts per hit
 
 // Flashlight
 const FLASHLIGHT_BEAM_RANGE = 18;     // tiles - how far the beam reaches in facing direction
