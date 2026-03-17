@@ -2,7 +2,7 @@
 
 > **AI RULE: NEVER use EnterPlanMode. No exceptions.**
 
-Plain language reference for all major systems and how they connect. Update when structure changes.
+Plain language reference for all major systems and how they connect.
 
 > **Working version: v0.5** — All code changes go in the current version folder only. Never modify previous versions.
 
@@ -24,7 +24,7 @@ Plain language reference for all major systems and how they connect. Update when
 
 **Game State** — Central source of truth for all flags and global values. Stores mode toggles (isPaused, isInBuildMode, etc.), artifact energy, points, and story progression. Read by nearly every system.
 
-**Player** — Input, movement, collision, animation. Holds a direct reference to World's grid for fast collision checks. Sends block destruction messages to World (doesn't modify the grid directly). Checks Game State before accepting movement inputs.
+**Player** — Input, movement, collision, animation. Three-component acceleration model: walking input (WD), dash thruster (fuel-limited burst system with Shift + direction), and post-dash slowdown (constant deceleration back to target speed). Walking deceleration extends above walking speed when no input and not dashing. Holds a direct reference to World's grid for fast collision checks. Sends block destruction messages to World (doesn't modify the grid directly). Checks Game State before accepting movement inputs.
 
 **World** — Single source of truth for the grid array. Owns all tile data including visual properties, artifact tile positions, and block HP. Handles block damage tracking and destruction internally. Receives block changes from Combat, Zombies, and Building Mode.
 
@@ -64,7 +64,7 @@ Plain language reference for all major systems and how they connect. Update when
 
 **Particles** — Lightweight shared system. Stores active particles, ticks physics and lifetime each frame. Spawned by Combat (bullet hits, zombie/player death) and World (block breaking). Drawn by Renderer.
 
-**Camera** — Tracks player in player mode, free pan in build mode. Owns position and zoom. Updated each frame by main loop. Read by Renderer and input coordinate transforms.
+**Camera** — Tracks player in player mode (lerp factor `CAMERA_FOLLOW_SPEED`), free pan in build mode. Owns position and zoom. Updated each frame by main loop. Read by Renderer and input coordinate transforms.
 
 **Physics** — Shared movement and collision utilities used by Player and Zombies. Tile solidity checks, step-up logic, and future helpers (e.g. slope handling, knockback curves). Lives close to World data but operates on any entity with position/velocity/bounds.
 
@@ -85,7 +85,7 @@ Movement uses keys[] polling in `updatePlayer()` each frame — separate from th
 
 Mouse handlers delegate to system handlers (crafting mouse, artifact hover/click, build click/drag) but still contain inline logic for camera pan and cursor style.
 
-**Constants** — Pure configuration data. Tile sizes, world dimensions, wave scaling formulas, weapon stats, physics values, melee combat tuning (`MELEE_SWING_SPEED_MULT`, `MELEE_MIN_SWING_DURATION`, `MELEE_SWING_ARC`, `MELEE_SAME_DIR_COOLDOWN`, `MELEE_KNOCKBACK_COEFF`, `MELEE_COLLIDER_TIP_BUFFER`, `MELEE_HIT_PADDING`, `SCREEN_SHAKE_INTENSITY`, `SCREEN_SHAKE_DURATION`, `FLYER_WALL_MULT`). No state, no logic beyond helper functions for wave stat calculation.
+**Constants** — Pure configuration data. Tile sizes, world dimensions, wave scaling formulas, weapon stats, physics values, melee combat tuning (`MELEE_SWING_SPEED_MULT`, `MELEE_MIN_SWING_DURATION`, `MELEE_SWING_ARC`, `MELEE_SAME_DIR_COOLDOWN`, `MELEE_KNOCKBACK_COEFF`, `MELEE_COLLIDER_TIP_BUFFER`, `MELEE_HIT_PADDING`, `SCREEN_SHAKE_INTENSITY`, `SCREEN_SHAKE_DURATION`, `FLYER_WALL_MULT`), dash/thruster tuning (`DASH_ACCEL`, `DASH_FUEL_MAX`, `DASH_FUEL_CONSUME`, `DASH_BURST_COST`, `DASH_FUEL_REGEN`, `DASH_EMPTY_COOLDOWN`, `DASH_SLOW_TARGET`, `DASH_SLOW_DECEL`, `DASH_SLOW_SNAP`), camera (`CAMERA_FOLLOW_SPEED`). No state, no logic beyond helper functions for wave stat calculation.
 
 **Debug** — Developer-only key bindings (F1-F11, backtick) for testing. Reaches into multiple systems (spawn control, wave skip, corruption toggle, weapon clear, flow field display, melee collider overlay, etc.). All debug actions route through gameState or system APIs — no direct mutation of internal state.
 

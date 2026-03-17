@@ -6,12 +6,36 @@ Plain language reference for every gameplay system as it exists in code today. N
 
 ## 1. Player
 
-### Movement
+### Movement (Three-Component Acceleration Model)
 - Walk speed: 200 px/sec with acceleration ramp (reaches max in 0.5s)
 - Deceleration matches acceleration — player slides to a stop, not instant
+- Walking deceleration extends above walking speed when no input and not dashing
 - Jump impulse: -440 px/sec (upward)
 - Gravity: 800 px/sec² (shared with all entities)
 - Body size: 0.8 tiles wide, 1.8 tiles tall
+
+### Dash / Thruster System
+Fuel-based burst thruster activated with Shift + directional key. Three acceleration components summed each frame: walking input (WD), dash thruster, and dash slowdown.
+
+**Thruster**
+- Acceleration: 9000 px/sec² while boosting
+- Dash direction from held keys (normalized for diagonals)
+- Fuel max: 1500, consume rate: 1800/sec (no regen during active thrust)
+- Burst cost: 150 fuel per burst — dash auto-stops at this threshold, must release and re-press Shift or direction to dash again
+- Fuel regen: 300/sec when not actively dashing (paused during empty cooldown)
+- Empty cooldown: 0.1 seconds before regen starts after fuel hits 0
+
+**Dash Slowdown (post-dash deceleration)**
+- Activates only after a dash ends, not as a general high-speed brake
+- Constant deceleration: 8000 px/sec² opposing velocity until speed ≤ target (195 px/sec)
+- Y-axis component subtracts gravity to avoid double-deceleration
+- Disarms when speed drops to or below target — stays off until next dash
+
+**Dash-Strike (melee hit while dashing)**
+- Triggered when melee connects during active dash or post-dash slowdown
+- Damage multiplier: 1.5×
+- Knockback multiplier: 1.5×
+- Grants 0.15 seconds of invulnerability per dash-strike hit
 
 ### Step-Up
 - Player automatically walks up 1-tile ledges without jumping
@@ -21,7 +45,7 @@ Plain language reference for every gameplay system as it exists in code today. N
 ### Health & Damage
 - Max HP: 100
 - Passive regen: 15 HP/sec (always active while alive)
-- Invulnerability window: 0.2 seconds after taking a hit (prevents stun-lock)
+- Invulnerability window: 0.5 seconds after taking a hit (prevents stun-lock)
 - Damage flash: red tint for 2.0 seconds after being hit
 - Knockback on hit: 200 px/sec impulse away from source
 
@@ -36,7 +60,9 @@ Plain language reference for every gameplay system as it exists in code today. N
 |-----|--------|
 | A / Left Arrow | Move left |
 | D / Right Arrow | Move right |
-| W / Space / Up Arrow | Jump (when on ground) |
+| Space / Up Arrow | Jump (when on ground) |
+| Shift + Direction | Dash thruster (burst, fuel-limited) |
+| W | Upward dash direction (does NOT jump) |
 | F | Toggle flashlight |
 | Tab | Cycle weapon |
 | C | Open comms |
@@ -55,7 +81,7 @@ Plain language reference for every gameplay system as it exists in code today. N
 - Scroll wheel: 1.06x multiplier per tick
 
 ### Following
-- In player mode: smooth lerp tracking (factor 8 × dt), centers on player
+- In player mode: smooth lerp tracking (factor 4 × dt), centers on player
 - Clamped to world bounds so you can't scroll past the edges
 - In build mode: free pan via right-click drag, zoom anchored to mouse position
 
@@ -156,9 +182,10 @@ Triggers when artifact HP drops to 0:
 - Cannot place on tiles occupied by the player
 - Cannot place on ARTIFACT tiles
 
-### Digging
+### Digging & Removal
 - Dig EARTH tiles — costs 50 KJ
-- Cannot dig ARTIFACT or BRICK tiles (brick can only be dug — same 50 KJ cost)
+- Remove BRICK tiles — refunds 50 KJ (full cost recovery)
+- Cannot dig ARTIFACT tiles
 - Destroyed blocks are gone permanently (until world reload)
 
 ### Controls
@@ -178,27 +205,23 @@ Triggers when artifact HP drops to 0:
 - Cell size: 36 pixels each
 - Grid can be zoomed and panned (middle-click drag, scroll wheel)
 
-### Materials (12 Types)
+### Materials (8 Types)
 All materials are available from wave 0 (no unlock gating):
 
-| Material | Color | Role |
-|----------|-------|------|
-| Steel | Gray | Structural — defines weapon bounding box |
-| Composite | Black | Lightweight structural |
-| Power Cell | Orange | Energy source |
-| Emitter | Yellow | Sends rays (for beam weapons) |
-| Plasma Cell | Cyan | Damage component |
-| Energy Crystal | Purple | Power component |
-| Titanium | Light gray | Strong structural |
-| Dark Steel | Dark blue | Heavy structural |
-| Void Glass | Navy | Dark structural |
-| Mirror | White | Reflects rays |
-| Lens | Light blue | Focuses rays |
-| Diagonal Mirror | White | Reflects rays diagonally |
+| Material | Color | Cost | Role |
+|----------|-------|------|------|
+| Iron | Warm brown-gray | 350 KJ | Structural — defines melee weapon bounding box |
+| Steel | Gray | 700 KJ | Heavy structural (not yet referenced in crafting logic) |
+| Composite | Black | 420 KJ | Lightweight structural (grip/handle) |
+| Power Cell | Orange | 2100 KJ | Energy source |
+| Emitter | Yellow | 2100 KJ | Sends rays (for beam weapons) |
+| Mirror | White | 700 KJ | Reflects rays |
+| Lens | Light blue | 1400 KJ | Focuses rays |
+| Diagonal Mirror | White | 700 KJ | Reflects rays diagonally |
 
 ### How It Works
 - Left click places the selected material, right click erases
-- Steel cells define the core weapon shape (bounding box)
+- Iron cells define the core melee weapon shape (bounding box)
 - Emitters send rays that bounce off mirrors — this is the beam weapon mechanic
 - Shape + materials determine output stats: damage, speed, range, knockback
 - Export generates a sprite and weapon data, saved to localStorage
@@ -223,10 +246,11 @@ All materials are available from wave 0 (no unlock gating):
 - Active weapon shown in HUD (lower-left)
 
 ### Emergency Shovel (Default Melee)
-- Damage: 15 HP per swing (to zombies), 50 HP per swing (to blocks)
-- Base swing duration: 0.3 seconds (effective: max(0.15s, base × 0.7) = 0.21s)
+- Damage: 75 HP per swing (to zombies), 50 HP per swing (to blocks)
+- Base swing duration: 0.35 seconds (effective: max(0.15s, base × 0.7) = 0.245s)
 - Range: 2.5 tiles from player center (variable with choke-up — see Combat §8)
-- Knockback: 180 px/sec (scaled by angular velocity and grip distance)
+- Knockback: 300 px/sec
+- All shovel stats are hardcoded constants — not derived from crafting formulas
 - Swing arc: 230° centered on cursor direction, hermite easing
 - Left click = CCW swing, right click = CW swing
 - Can hit multiple zombies in a single swing
@@ -243,7 +267,11 @@ All materials are available from wave 0 (no unlock gating):
 - Fires simultaneously with melee (not weapon-swapped — always active)
 
 ### Crafted Weapons
-- Custom stats based on crafting output (damage, speed, range, knockback)
+- **Damage**: cell count × material damage per cell (iron = 75 per cell), 1.25× bonus with handle
+- **Swing speed**: derived from swing weight (moment of inertia), 0.75× with handle
+- **Range**: derived from weapon length + handle length
+- **Knockback**: base 300 + coefficient × sqrt(swingWeight) × range
+- Damage scales linearly with cell count, not swing weight — every iron cell adds one wave of dominance (2 HTK)
 - Rendered with their generated sprite in HUD
 - Stored in localStorage, hot-reloaded every 3 seconds
 - Persist across page refreshes
@@ -280,7 +308,8 @@ All materials are available from wave 0 (no unlock gating):
 - **Direction**: 45° blend of swing tangent and radial outward from pivot. Tangent direction flips with CW/CCW swing
 - **Angular velocity scaling**: Knockback magnitude × normalized `swingEaseVel(progress) / peakVel` — hits at peak swing speed deal full knockback, hits at start/end deal less
 - **Grip scaling**: Knockback × `meleeGripDist / fullTipDist` — choked-up swings deal proportionally less knockback
-- **Decay**: Linear deceleration using zombie's own movement acceleration (walkers: `speed/0.5`, flyers: `speed/0.15`). Not friction-based
+- **Decay**: Velocity-proportional drag system. Deceleration = `KNOCKBACK_BASE_DECAY (200) + KNOCKBACK_DRAG (0.7) × currentSpeed`. Brakes hard at high speeds, coasts to a stop at low speeds. Base decay provides a floor so zombies don't drift forever
+- **Wall impact damage**: When a zombie hits a wall during knockback at speed > `KNOCKBACK_WALL_MIN_SPEED` (450 px/s), it takes `speed × KNOCKBACK_WALL_DMG_COEFF (0.5)` damage and knockback zeroes out instantly. Rewards positioning and building walls strategically
 - **Wall collision**: Knockback velocity zeroed on the contact axis when zombie hits a wall (prevents phasing through terrain)
 - Knockback grants 0.3 seconds of absorption immunity (prevents instant re-absorption at artifact)
 
@@ -309,8 +338,7 @@ All materials are available from wave 0 (no unlock gating):
 - Airborne, no gravity
 - Navigate via flow field pathfinding with 4-point body sampling
 - Acceleration: reaches max speed in 0.15 seconds
-- Player aggression: if player is within 5 tiles AND closer than the artifact, flyers divert toward player
-- Wall handling: soft penalty acceleration pushes them out (1.2x their own accel)
+- Wall handling: soft penalty acceleration pushes them out (1.8x their own accel)
 - Can break blocks at breach points when stuck against walls
 
 **Walkers (33% of spawns — currently disabled, default to flyer)**
@@ -320,10 +348,23 @@ All materials are available from wave 0 (no unlock gating):
 - Failed jump tracking: after consecutive failed jumps, switches to block-breaking
 - State machine: walking → jumping → breaking → absorbing
 
+### Roles
+
+**Hunters (40% of spawns)**
+- Target the player exclusively, ignoring the artifact
+- Prevents turtling behind walls — player must actively defend
+- During artifact corruption, behave same as normal (all zombies target player anyway)
+
+**Breakers (10% of spawns)**
+- Move in a straight line toward their target, ignoring flow fields
+- Destroy any block they touch on contact
+- Forces player to actively defend walls, not just build and forget
+
 ### Spawning
 - Location: randomly left or right side, ~45 tiles from artifact center
 - Finds ground at spawn column, spawns on surface
-- Spawn rate per wave: starts at 2.5 seconds between spawns, decreases by 0.12s per wave, minimum 0.4s
+- Spawn rate per wave: starts at 3.0 seconds between spawns, decreases by 0.1s per wave, minimum 0.1s
+- **Max zombies alive**: 35 — spawning pauses when cap is reached, resumes as zombies are killed. Creates sustained combat in later waves rather than burst overwhelm
 - First zombie of each wave spawns immediately
 
 ### Stats Scaling (Per Wave)
@@ -332,23 +373,28 @@ All materials are available from wave 0 (no unlock gating):
 - Formula: floor(5 + 2.5 × (wave-1)^1.35)
 - Wave 1: 5, Wave 2: ~8, Wave 3: ~11, scaling upward
 
+**Zombie HP — Linear Scaling**
+- Formula: `150 × wave` (both walkers and flyers)
+- Wave 1: 150, Wave 2: 300, Wave 3: 450, Wave 5: 750, Wave 10: 1500
+- Designed so each iron cell = one wave of dominance (2 HTK with 75 damage per cell)
+
 **Flyer Stats**
 | Stat | Base (Wave 1) | Growth |
 |------|---------------|--------|
-| HP | 150 | ×(1 + 0.18 × (wave-1))^1.15 |
-| Min Speed | 50 px/sec | +9/wave |
-| Max Speed | 130 px/sec | +15/wave (cap: 420) |
+| HP | 150 | 150 × wave (linear) |
+| Min Speed | 30 px/sec | +5/wave |
+| Max Speed | 50 px/sec | +10/wave (cap: 300) |
 | Contact Damage | 30 HP | ×(1 + 0.06 × (wave-1)) |
 | Break DPS | 33 | ×(1 + 0.05 × (wave-1)) |
 
 **Walker Stats**
 | Stat | Base (Wave 1) | Growth |
 |------|---------------|--------|
-| HP | 150 | Same formula as flyer |
-| Min Speed | 25 px/sec | +3/wave |
+| HP | 150 | 150 × wave (linear) |
+| Min Speed | 60 px/sec | +3/wave |
 | Max Speed | 65 px/sec | +5/wave (cap: 140) |
-| Contact Damage | 30 HP | Same as flyer |
-| Break DPS | 33 | Same as flyer |
+| Contact Damage | 30 HP | Flat (no scaling) |
+| Break DPS | 33 | ×(1 + 0.05 × (wave-1)) |
 
 Each zombie gets a randomized speed within its wave's min–max range.
 
@@ -374,12 +420,12 @@ Each zombie gets a randomized speed within its wave's min–max range.
 - Player-zombie: circle system, applies contact damage + knockback to player. Absorbing zombies still collide with player (intentional — do not skip)
 - Flyer wall penalty: soft acceleration push (`FLYER_WALL_MULT` = 1.2× own accel). Zeroes both movement velocity and knockback velocity on the contact axis
 
-### Targeting (Dual Flow Field)
+### Targeting
+- **Normal zombies (60%)**: Always target the artifact. Will run through the player if blocking the shortest path but do not actively chase the player
+- **Hunters (40%)**: Always target the player exclusively, ignoring the artifact
+- **During artifact corruption**: All zombies forced to target player regardless of role
+- **When corruption ends**: All zombies revert to their normal targeting behavior
 - Two flow fields computed: one rooted at the artifact, one rooted at the player
-- Each zombie independently compares BFS path distance to player vs artifact
-- Whichever target is closer by path distance wins (per-zombie, per-frame)
-- During artifact corruption: all zombies forced to target player
-- When corruption ends: all zombies revert to artifact targeting
 - Player flow field recomputes when player moves to a new tile (throttled)
 - Both flow fields invalidated when block solidity changes
 
@@ -396,7 +442,7 @@ Each zombie gets a randomized speed within its wave's min–max range.
 - States: `idle` → `active` → `countdown` → `active` (loop while auto-advance on)
 - Wave ends when all zombies for that wave have been spawned AND killed/absorbed
 - **Auto-advance**: enabled by default when player first clicks Conduit to start wave 1
-  - On wave completion: enters `countdown` state with 15-second timer
+  - On wave completion: enters `countdown` state with 60-second timer
   - Timer reaches 0: next wave starts automatically via `advanceWave()`
   - Player can toggle auto-advance on/off via Conduit circle at any time
   - If auto-advance is off when a wave completes, state goes to `idle` instead of `countdown`
@@ -405,9 +451,10 @@ Each zombie gets a randomized speed within its wave's min–max range.
 
 ### Spawn Timing
 - First zombie: immediate
-- Subsequent: timer-based, starting at 2.5s interval
-- Interval decreases by 0.12s per wave
-- Hard floor: 0.4 seconds minimum between spawns
+- Subsequent: timer-based, starting at 3.0s interval
+- Interval decreases by 0.1s per wave
+- Hard floor: 0.1 seconds minimum between spawns
+- Max zombies alive: 35 (spawning pauses at cap, resumes on kills)
 
 ---
 
@@ -423,7 +470,10 @@ Each zombie gets a randomized speed within its wave's min–max range.
 ### Costs
 - Place block (build mode): 50 KJ
 - Dig block (build mode): 50 KJ
-- Crafting material costs: defined in Plan.md but not yet implemented in code (all materials currently free)
+- Remove brick (build mode): refunds 50 KJ
+- Crafting materials: Iron 350, Composite 420, Steel 700, Mirror 700, Diag Mirror 700, Lens 1400, Power Cell 2100, Emitter 2100
+- Total energy cost displayed in weapon preview; deducted from KJ balance when weapon is saved
+- Insufficient KJ blocks weapon save (button grayed out)
 
 ---
 
@@ -520,6 +570,7 @@ Player cannot move during the intro. Tutorial step tracking begins on completion
   - During active wave: "State Advancement Active" (red, 0.7 opacity)
 - **Weapon Display** — bottom-left corner (30px margin), shows shovel pictogram or crafted weapon sprite (18px bold Jura)
 - **Weapon Slot** — current/total indicator when multiple weapons exist (13px Jura)
+- **Dash Fuel Bar** — above weapon display, 80×6px bar. Cyan fill when available, red when on empty cooldown. Border in dim cyan.
 - **Controls Button** — upper-right "?" icon
 
 ### Controls Panel
@@ -532,6 +583,12 @@ Player cannot move during the intro. Tutorial step tracking begins on completion
 ---
 
 ## 16. Pause & Game Over
+
+### Interface Safety Net
+- All UI overlays (crafting, comms, controls, artifact UI) auto-close when:
+  - Player takes zombie contact damage
+  - A zombie is absorbed into the artifact
+- Implemented via `stateCloseAllInterfaces()` in state.js
 
 ### Pause Menu
 - ESC toggles pause on/off
@@ -640,10 +697,10 @@ Dual flow field system — zombies navigate toward either the artifact or the pl
 - Invalidated on block solidity changes (same as artifact field)
 
 ### Per-Zombie Targeting
-- Each zombie compares `playerFlowField[tile].dist` vs `flowField[tile].dist`
-- Whichever path distance is shorter determines which flow field the zombie follows
-- During artifact corruption: all zombies forced to player field regardless of distance
-- No oscillation possible — path distances are stable values, not range-boundary checks
+- **Normal zombies**: Always use artifact flow field (target artifact)
+- **Hunters**: Always use player flow field (target player)
+- During artifact corruption: all zombies forced to player field regardless of role
+- Symmetric design: normals never divert to player, hunters never divert to artifact
 
 ### Breach System
 - After BFS, both flow fields detect enclosed regions that zombies can't reach

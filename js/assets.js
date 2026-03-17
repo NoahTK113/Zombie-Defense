@@ -91,6 +91,122 @@ function generateArtifactVeins() {
 }
 
 
+// --- Concrete Texture Generator ---
+// Light gray with static noise
+function assetsGenerateConcreteTiles(count) {
+    const tiles = [];
+    for (let v = 0; v < count; v++) {
+        const off = document.createElement('canvas');
+        off.width = TILE_SIZE;
+        off.height = TILE_SIZE;
+        const oc = off.getContext('2d');
+        const imgData = oc.createImageData(TILE_SIZE, TILE_SIZE);
+        const d = imgData.data;
+        for (let py = 0; py < TILE_SIZE; py++) {
+            for (let px = 0; px < TILE_SIZE; px++) {
+                const idx = (py * TILE_SIZE + px) * 4;
+                const noise = Math.floor(Math.random() * 30) - 15;
+                d[idx]     = 170 + noise;
+                d[idx + 1] = 170 + noise;
+                d[idx + 2] = 175 + noise;
+                d[idx + 3] = 255;
+            }
+        }
+        oc.putImageData(imgData, 0, 0);
+        tiles.push(off);
+    }
+    return tiles;
+}
+
+// --- Steel Texture Generator ---
+// Darker gray with scattered rust-colored pixels
+function assetsGenerateSteelTiles(count) {
+    const tiles = [];
+    for (let v = 0; v < count; v++) {
+        const off = document.createElement('canvas');
+        off.width = TILE_SIZE;
+        off.height = TILE_SIZE;
+        const oc = off.getContext('2d');
+        const imgData = oc.createImageData(TILE_SIZE, TILE_SIZE);
+        const d = imgData.data;
+        for (let py = 0; py < TILE_SIZE; py++) {
+            for (let px = 0; px < TILE_SIZE; px++) {
+                const idx = (py * TILE_SIZE + px) * 4;
+                if (Math.random() < 0.08) {
+                    // Rust pixel
+                    d[idx]     = 140 + Math.floor(Math.random() * 40);
+                    d[idx + 1] = 60 + Math.floor(Math.random() * 30);
+                    d[idx + 2] = 30 + Math.floor(Math.random() * 20);
+                } else {
+                    // Dark steel gray — flat, no static
+                    const base = 95 + Math.floor(Math.random() * 8);
+                    d[idx]     = base;
+                    d[idx + 1] = base;
+                    d[idx + 2] = base + 3;
+                }
+                d[idx + 3] = 255;
+            }
+        }
+        oc.putImageData(imgData, 0, 0);
+        tiles.push(off);
+    }
+    return tiles;
+}
+
+// --- Material X Texture Generator ---
+// Semi-transparent red accent with subtle streaks
+function assetsGenerateMaterialXTiles(count) {
+    const tiles = [];
+    for (let v = 0; v < count; v++) {
+        const off = document.createElement('canvas');
+        off.width = TILE_SIZE;
+        off.height = TILE_SIZE;
+        const oc = off.getContext('2d');
+        const imgData = oc.createImageData(TILE_SIZE, TILE_SIZE);
+        const d = imgData.data;
+        for (let py = 0; py < TILE_SIZE; py++) {
+            for (let px = 0; px < TILE_SIZE; px++) {
+                const idx = (py * TILE_SIZE + px) * 4;
+                const streak = Math.sin(px * 0.8 + py * 0.3 + v) * 20;
+                d[idx]     = 180 + Math.floor(streak + Math.random() * 25);
+                d[idx + 1] = 40 + Math.floor(Math.random() * 20);
+                d[idx + 2] = 40 + Math.floor(Math.random() * 20);
+                d[idx + 3] = 180;
+            }
+        }
+        oc.putImageData(imgData, 0, 0);
+        tiles.push(off);
+    }
+    return tiles;
+}
+
+// --- Material Y Texture Generator ---
+// Semi-transparent blue accent with speckle pattern
+function assetsGenerateMaterialYTiles(count) {
+    const tiles = [];
+    for (let v = 0; v < count; v++) {
+        const off = document.createElement('canvas');
+        off.width = TILE_SIZE;
+        off.height = TILE_SIZE;
+        const oc = off.getContext('2d');
+        const imgData = oc.createImageData(TILE_SIZE, TILE_SIZE);
+        const d = imgData.data;
+        for (let py = 0; py < TILE_SIZE; py++) {
+            for (let px = 0; px < TILE_SIZE; px++) {
+                const idx = (py * TILE_SIZE + px) * 4;
+                const speckle = Math.random() < 0.15 ? 60 : 0;
+                d[idx]     = 30 + Math.floor(Math.random() * 20);
+                d[idx + 1] = 50 + Math.floor(Math.random() * 25) + speckle;
+                d[idx + 2] = 160 + Math.floor(Math.random() * 30) + speckle;
+                d[idx + 3] = 180;
+            }
+        }
+        oc.putImageData(imgData, 0, 0);
+        tiles.push(off);
+    }
+    return tiles;
+}
+
 // --- Initialize All Assets ---
 // Earth: procedurally generated rock textures at TILE_TEXELS resolution
 assets.earth = generateRockTiles(32);
@@ -102,3 +218,11 @@ assets.artifactBase = generateTileVariants(16, 10, 20, 25, 25, 55, 35);
 assets.artifactVeins = generateArtifactVeins();
 // Noise texture (256x256, blue-tinted — shared by renderer and crafting)
 assets.noise = generateNoiseTexture(256);
+// Concrete: light gray with static noise
+assets.concrete = assetsGenerateConcreteTiles(16);
+// Steel: dark gray with rust spots
+assets.steel = assetsGenerateSteelTiles(16);
+// Material X: semi-transparent red with streaks
+assets.materialX = assetsGenerateMaterialXTiles(16);
+// Material Y: semi-transparent blue with speckles
+assets.materialY = assetsGenerateMaterialYTiles(16);

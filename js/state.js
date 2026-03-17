@@ -49,3 +49,11 @@ const gameState = {
 function isInterfaceOpen() {
     return gameState.commsOpen || gameState.craftingOpen || artifactUI.open;
 }
+
+// Force-close all UI overlays (called on player hit or artifact absorption)
+function stateCloseAllInterfaces() {
+    gameState.commsOpen = false;
+    gameState.craftingOpen = false;
+    gameState.controlsOpen = false;
+    artifactUI.open = false;
+}

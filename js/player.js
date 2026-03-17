@@ -18,6 +18,11 @@ const player = {
     dead: false,
     respawnTimer: 0,
     damageFlash: 0,
+    dashFuel: DASH_FUEL_MAX,
+    dashEmptyCooldown: 0,
+    dashSlowActive: false,
+    dashKeyUsed: false,
+    dashBurstUsed: 0,
 };
 
 function getPlayerBounds() {
@@ -76,26 +81,116 @@ function updatePlayer(dt) {
         return;
     }
 
-    // Horizontal input (acceleration-based, 0→max in 0.5 seconds)
-    const playerAccel = player.speed / 0.5;
+    // === Acceleration-based movement: WD + friction + dash ===
+
+    const playerAccel = player.speed / 0.5; // 400 px/sec²
     const moveLeft = keys['KeyA'] || keys['ArrowLeft'];
     const moveRight = keys['KeyD'] || keys['ArrowRight'];
-    if (moveLeft && !moveRight) {
-        player.vx -= playerAccel * dt;
-        if (player.vx < -player.speed) player.vx = -player.speed;
-        player.facingRight = false;
-    } else if (moveRight && !moveLeft) {
-        player.vx += playerAccel * dt;
-        if (player.vx > player.speed) player.vx = player.speed;
-        player.facingRight = true;
+    const speed = Math.sqrt(player.vx * player.vx + player.vy * player.vy);
+
+    // --- Component 1: WD walking input (zeroed when at or above walking speed) ---
+    let wdAx = 0;
+    if (Math.abs(player.vx) < player.speed) {
+        if (moveLeft && !moveRight) {
+            wdAx = -playerAccel;
+            player.facingRight = false;
+        } else if (moveRight && !moveLeft) {
+            wdAx = playerAccel;
+            player.facingRight = true;
+        } else {
+            // No input: decelerate to stop (only below walking speed)
+            if (Math.abs(player.vx) < playerAccel * dt) player.vx = 0;
+            else wdAx = -Math.sign(player.vx) * playerAccel;
+        }
     } else {
-        // No input: decelerate to stop
-        if (Math.abs(player.vx) < playerAccel * dt) player.vx = 0;
-        else player.vx -= Math.sign(player.vx) * playerAccel * dt;
+        // Above walking speed: still update facing direction
+        if (moveLeft && !moveRight) player.facingRight = false;
+        else if (moveRight && !moveLeft) player.facingRight = true;
     }
 
-    // Jump
-    if ((keys['KeyW'] || keys['Space'] || keys['ArrowUp']) && player.onGround) {
+    // --- Component 2: Dash thruster (Shift + direction, fuel-limited) ---
+    let dashAx = 0, dashAy = 0;
+    let activelyDashing = false;
+    const shifting = keys['ShiftLeft'] || keys['ShiftRight'];
+
+    // Require shift+direction release between dashes
+    if (!shifting || (!moveLeft && !moveRight && !(keys['KeyW'] || keys['ArrowUp'] || keys['Space']) && !(keys['KeyS'] || keys['ArrowDown']))) {
+        player.dashKeyUsed = false;
+        player.dashBurstUsed = 0;
+    }
+
+    if (shifting && !player.dashKeyUsed && player.dashFuel > 0 && player.dashEmptyCooldown <= 0) {
+        // Build dash direction from held keys
+        let ddx = 0, ddy = 0;
+        if (moveLeft) ddx -= 1;
+        if (moveRight) ddx += 1;
+        if (keys['KeyW'] || keys['ArrowUp'] || keys['Space']) ddy -= 1;
+        if (keys['KeyS'] || keys['ArrowDown']) ddy += 1;
+
+        if (ddx !== 0 || ddy !== 0) {
+            const dlen = Math.sqrt(ddx * ddx + ddy * ddy);
+            dashAx = (ddx / dlen) * DASH_ACCEL;
+            dashAy = (ddy / dlen) * DASH_ACCEL;
+            activelyDashing = true;
+            player.dashSlowActive = true;
+
+            // Consume fuel
+            const fuelUsed = DASH_FUEL_CONSUME * dt;
+            player.dashFuel -= fuelUsed;
+            player.dashBurstUsed += fuelUsed;
+
+            if (player.dashFuel <= 0) {
+                player.dashFuel = 0;
+                player.dashEmptyCooldown = DASH_EMPTY_COOLDOWN;
+                player.dashKeyUsed = true;
+            } else if (player.dashBurstUsed >= DASH_BURST_COST) {
+                player.dashKeyUsed = true;
+            }
+        }
+    }
+
+    // Fuel regen (only when not actively dashing)
+    if (!activelyDashing) {
+        if (player.dashEmptyCooldown > 0) {
+            player.dashEmptyCooldown -= dt;
+        } else if (player.dashFuel < DASH_FUEL_MAX) {
+            player.dashFuel = Math.min(DASH_FUEL_MAX, player.dashFuel + DASH_FUEL_REGEN * dt);
+        }
+    }
+
+    // Walking deceleration extends above player.speed when no input and not dashing
+    if (Math.abs(player.vx) >= player.speed && !moveLeft && !moveRight && !activelyDashing) {
+        wdAx = -Math.sign(player.vx) * playerAccel;
+    }
+
+    // --- Component 3: Dash slowdown (constant decel when above target and not thrusting) ---
+    let slowAx = 0, slowAy = 0;
+    if (!activelyDashing && player.dashSlowActive) {
+        if (speed <= DASH_SLOW_TARGET) {
+            // Reached target speed — disarm slowdown
+            player.dashSlowActive = false;
+        } else {
+            const excess = speed - DASH_SLOW_TARGET;
+            if (excess < DASH_SLOW_SNAP) {
+                // Snap: scale velocity down to target speed
+                const scale = DASH_SLOW_TARGET / speed;
+                player.vx *= scale;
+                player.vy *= scale;
+                player.dashSlowActive = false;
+            } else {
+                // Constant deceleration opposing velocity (subtract gravity from Y to avoid double-decel)
+                slowAx = -(player.vx / speed) * DASH_SLOW_DECEL;
+                slowAy = -(player.vy / speed) * DASH_SLOW_DECEL - GRAVITY;
+            }
+        }
+    }
+
+    // --- Sum accelerations and integrate velocity ---
+    player.vx += (wdAx + dashAx + slowAx) * dt;
+    player.vy += (dashAy + slowAy) * dt;
+
+    // Jump (instant impulse, not an acceleration)
+    if ((keys['Space'] || keys['ArrowUp']) && player.onGround) {
         player.vy = player.jumpForce;
         player.onGround = false;
     }

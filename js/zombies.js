@@ -432,8 +432,13 @@ function spawnWalker() {
     );
     const hp = stats.hp;
 
+    const role = Math.random() < WAVE_CONFIG.hunterRatio ? 'hunter' : 'normal';
+    const breaker = Math.random() < WAVE_CONFIG.breakerRatio;
+
     zombies.push({
         type: 'walker',
+        role: role,
+        breaker: breaker,
         x: (spawnTX + 0.5) * TILE_SIZE,
         y: groundY * TILE_SIZE,
         w: TILE_SIZE * 0.8,
@@ -486,8 +491,14 @@ function spawnFlyer() {
     );
     const hp = stats.hp;
 
+    // Roll role and breaker trait
+    const role = Math.random() < WAVE_CONFIG.hunterRatio ? 'hunter' : 'normal';
+    const breaker = Math.random() < WAVE_CONFIG.breakerRatio;
+
     zombies.push({
         type: 'flyer',
+        role: role,
+        breaker: breaker,
         x: spawnX,
         y: spawnY,
         w: TILE_SIZE * 0.8,
@@ -711,6 +722,7 @@ function resolveZombieCollisions() {
                 player.invulnTimer = PLAYER_INVULN_TIME;
                 player.damageFlash = 2.0;
                 playSound('playerHit');
+                stateCloseAllInterfaces();
                 if (player.hp <= 0) {
                     player.hp = 0;
                     killPlayer();
@@ -814,7 +826,7 @@ function zombieTouchesArtifact(z) {
 
 function updateZombies(dt) {
     // Wave-gated spawning (only during active wave)
-    if (!gameState.debugSpawnDisabled && gameState.waveState === 'active' && wave.zombiesSpawned < wave.zombiesTotal) {
+    if (!gameState.debugSpawnDisabled && gameState.waveState === 'active' && wave.zombiesSpawned < wave.zombiesTotal && zombies.length < WAVE_CONFIG.maxZombiesAlive) {
         wave.spawnTimer += dt;
         if (wave.spawnTimer >= wave.spawnInterval) {
             wave.spawnTimer -= wave.spawnInterval;
@@ -877,9 +889,8 @@ function updateZombies(dt) {
         // Tick absorb immunity
         if (z.absorbImmunity > 0) z.absorbImmunity -= dt;
 
-        // Early artifact touch check (skip if immune from recent knockback)
-        const artifactAccepting = !(gameState.artifactCorrupted && artifactCorruptTimer > 0);
-        if (artifactAccepting && z.absorbImmunity <= 0 && zombieTouchesArtifact(z)) {
+        // Early artifact touch check (skip if immune from recent knockback, corrupted, or hunter while player alive)
+        if ((z.role !== 'hunter' || player.dead) && !gameState.artifactCorrupted && z.absorbImmunity <= 0 && zombieTouchesArtifact(z)) {
             z.state = 'absorbing';
             z.absorbTimer = 0;
             z.vx = 0;
@@ -897,77 +908,101 @@ function updateZombies(dt) {
             const zty = Math.floor((z.y - z.h / 2) / TILE_SIZE);
             const zIdx = zty * WORLD_W + ztx;
 
-            if (artifactCorrupted && !player.dead) {
+            if (z.role === 'hunter' && !player.dead) {
+                // Hunters always target the player
+                z.usePlayerField = true;
+            } else if (artifactCorrupted && !player.dead) {
                 // Corruption phase 2: all zombies target player
                 z.usePlayerField = true;
-            } else if (!player.dead && playerFlowField && flowField) {
-                const playerCell = playerFlowField[zIdx];
-                const artifactCell = flowField[zIdx];
-                const playerPathDist = playerCell ? playerCell.dist : Infinity;
-                const artifactPathDist = artifactCell ? artifactCell.dist : Infinity;
-                z.usePlayerField = (playerPathDist < artifactPathDist);
             } else {
+                // Normal zombies always target artifact
                 z.usePlayerField = false;
             }
 
             // Select the active flow field for this zombie
             const activeField = z.usePlayerField ? playerFlowField : flowField;
 
-            // 4-point body sampling of active flow field
-            const samplePoints = [
-                [z.x, z.y - z.h],                   // top-center (head)
-                [z.x, z.y],                         // bottom-center (feet)
-                [z.x - z.w / 2, z.y - z.h / 2],   // left-center
-                [z.x + z.w / 2, z.y - z.h / 2],   // right-center
-            ];
-
-            let fdx = 0, fdy = 0, samples = 0;
-            for (const [px, py] of samplePoints) {
-                const stx = Math.floor(px / TILE_SIZE);
-                const sty = Math.floor(py / TILE_SIZE);
-                if (stx < 0 || stx >= WORLD_W || sty < 0 || sty >= WORLD_H) continue;
-                const cell = activeField ? activeField[sty * WORLD_W + stx] : null;
-                if (!cell) continue;
-                const clen = Math.sqrt(cell.dx * cell.dx + cell.dy * cell.dy);
-                if (clen > 0) {
-                    fdx += cell.dx / clen;
-                    fdy += cell.dy / clen;
-                }
-                samples++;
-            }
-
-            // Store resultant direction for debug rendering
-            z._dbgSteerX = fdx;
-            z._dbgSteerY = fdy;
-
-            if (samples > 0 && (fdx !== 0 || fdy !== 0)) {
-                // Steer along averaged flow field direction
-                const len = Math.sqrt(fdx * fdx + fdy * fdy);
-                z.vx += (fdx / len) * accel * dt;
-                z.vy += (fdy / len) * accel * dt;
-            } else if (samples === 0) {
-                // No flow field data — fallback to direct steering toward target
-                let fallbackX, fallbackY;
+            if (z.breaker) {
+                // Breakers steer in a straight line toward target (ignore flow field)
+                let targetX, targetY;
                 if (z.usePlayerField) {
-                    fallbackX = player.x;
-                    fallbackY = player.y - player.h / 2;
+                    targetX = player.x;
+                    targetY = player.y - player.h / 2;
                 } else {
-                    fallbackX = artifactCX;
-                    fallbackY = (GROUND_LEVEL - ARTIFACT_SIZE) * TILE_SIZE;
+                    targetX = artifactCX;
+                    targetY = (GROUND_LEVEL - ARTIFACT_SIZE) * TILE_SIZE;
                 }
-                const dx = fallbackX - z.x;
-                const dy = fallbackY - (z.y - z.h / 2);
+                const dx = targetX - z.x;
+                const dy = targetY - (z.y - z.h / 2);
                 const dist = Math.sqrt(dx * dx + dy * dy);
+                z._dbgSteerX = dx;
+                z._dbgSteerY = dy;
                 if (dist > 2) {
                     z.vx += (dx / dist) * accel * dt;
                     z.vy += (dy / dist) * accel * dt;
+                } else {
+                    if (Math.abs(z.vx) < accel * dt) z.vx = 0;
+                    else z.vx -= Math.sign(z.vx) * accel * dt;
+                    if (Math.abs(z.vy) < accel * dt) z.vy = 0;
+                    else z.vy -= Math.sign(z.vy) * accel * dt;
                 }
             } else {
-                // At goal — decelerate
-                if (Math.abs(z.vx) < accel * dt) z.vx = 0;
-                else z.vx -= Math.sign(z.vx) * accel * dt;
-                if (Math.abs(z.vy) < accel * dt) z.vy = 0;
-                else z.vy -= Math.sign(z.vy) * accel * dt;
+                // Normal/hunter: 4-point body sampling of active flow field
+                const samplePoints = [
+                    [z.x, z.y - z.h],                   // top-center (head)
+                    [z.x, z.y],                         // bottom-center (feet)
+                    [z.x - z.w / 2, z.y - z.h / 2],   // left-center
+                    [z.x + z.w / 2, z.y - z.h / 2],   // right-center
+                ];
+
+                let fdx = 0, fdy = 0, samples = 0;
+                for (const [px, py] of samplePoints) {
+                    const stx = Math.floor(px / TILE_SIZE);
+                    const sty = Math.floor(py / TILE_SIZE);
+                    if (stx < 0 || stx >= WORLD_W || sty < 0 || sty >= WORLD_H) continue;
+                    const cell = activeField ? activeField[sty * WORLD_W + stx] : null;
+                    if (!cell) continue;
+                    const clen = Math.sqrt(cell.dx * cell.dx + cell.dy * cell.dy);
+                    if (clen > 0) {
+                        fdx += cell.dx / clen;
+                        fdy += cell.dy / clen;
+                    }
+                    samples++;
+                }
+
+                // Store resultant direction for debug rendering
+                z._dbgSteerX = fdx;
+                z._dbgSteerY = fdy;
+
+                if (samples > 0 && (fdx !== 0 || fdy !== 0)) {
+                    // Steer along averaged flow field direction
+                    const len = Math.sqrt(fdx * fdx + fdy * fdy);
+                    z.vx += (fdx / len) * accel * dt;
+                    z.vy += (fdy / len) * accel * dt;
+                } else if (samples === 0) {
+                    // No flow field data — fallback to direct steering toward target
+                    let fallbackX, fallbackY;
+                    if (z.usePlayerField) {
+                        fallbackX = player.x;
+                        fallbackY = player.y - player.h / 2;
+                    } else {
+                        fallbackX = artifactCX;
+                        fallbackY = (GROUND_LEVEL - ARTIFACT_SIZE) * TILE_SIZE;
+                    }
+                    const dx = fallbackX - z.x;
+                    const dy = fallbackY - (z.y - z.h / 2);
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist > 2) {
+                        z.vx += (dx / dist) * accel * dt;
+                        z.vy += (dy / dist) * accel * dt;
+                    }
+                } else {
+                    // At goal — decelerate
+                    if (Math.abs(z.vx) < accel * dt) z.vx = 0;
+                    else z.vx -= Math.sign(z.vx) * accel * dt;
+                    if (Math.abs(z.vy) < accel * dt) z.vy = 0;
+                    else z.vy -= Math.sign(z.vy) * accel * dt;
+                }
             }
 
             // Clamp speed
@@ -978,16 +1013,23 @@ function updateZombies(dt) {
             }
             z.facingRight = z.vx > 0 || (z.vx === 0 && z.facingRight);
 
-            // Apply knockback displacement (decayed by zombie's own acceleration)
-            z.x += z.knockVx * dt;
-            z.y += z.knockVy * dt;
-            // Hard resolve so flyers don't get stuck in terrain from knockback
-            applyFlyerWallPenalty(z, dt);
+            // Apply knockback displacement (velocity-proportional drag)
             const knockSpd = Math.sqrt(z.knockVx * z.knockVx + z.knockVy * z.knockVy);
             if (knockSpd > 0) {
-                const decay = accel * dt;
-                if (knockSpd <= decay) { z.knockVx = 0; z.knockVy = 0; }
-                else { const s = (knockSpd - decay) / knockSpd; z.knockVx *= s; z.knockVy *= s; }
+                z.x += z.knockVx * dt;
+                z.y += z.knockVy * dt;
+                // Hard resolve so flyers don't get stuck in terrain from knockback
+                const hitWallKnock = applyFlyerWallPenalty(z, dt);
+                // Wall impact damage: if wall contact during fast knockback
+                if (knockSpd > KNOCKBACK_WALL_MIN_SPEED && hitWallKnock) {
+                    z.hp -= knockSpd * KNOCKBACK_WALL_DMG_COEFF;
+                    z.knockVx = 0;
+                    z.knockVy = 0;
+                } else {
+                    const decay = (KNOCKBACK_BASE_DECAY + KNOCKBACK_DRAG * knockSpd) * dt;
+                    if (knockSpd <= decay) { z.knockVx = 0; z.knockVy = 0; }
+                    else { const s = (knockSpd - decay) / knockSpd; z.knockVx *= s; z.knockVy *= s; }
+                }
             }
 
             // Move and apply soft wall penalty (no hard position snap)
@@ -995,14 +1037,20 @@ function updateZombies(dt) {
             z.y += z.vy * dt;
             const hitWall = applyFlyerWallPenalty(z, dt);
 
-            // Breach breaking: if flyer is touching a wall while on a breach point,
-            // find the nearest breakable block and start attacking it
+            // Wall-contact breaking:
+            // Breakers break any block they touch. Normal flyers only break at breach points.
             if (hitWall) {
-                const cTX = Math.floor(z.x / TILE_SIZE);
-                const cTY = Math.floor((z.y - z.h / 2) / TILE_SIZE);
-                const field = z.usePlayerField ? playerFlowField : flowField;
-                const cell = field ? field[cTY * WORLD_W + cTX] : null;
-                if (cell && cell.breach) {
+                let shouldBreak = false;
+                if (z.breaker) {
+                    shouldBreak = true;
+                } else {
+                    const cTX = Math.floor(z.x / TILE_SIZE);
+                    const cTY = Math.floor((z.y - z.h / 2) / TILE_SIZE);
+                    const field = z.usePlayerField ? playerFlowField : flowField;
+                    const cell = field ? field[cTY * WORLD_W + cTX] : null;
+                    shouldBreak = cell && cell.breach;
+                }
+                if (shouldBreak) {
                     const target = findNearbyBreakable(z);
                     if (target) {
                         z.state = 'breaking';
@@ -1052,18 +1100,25 @@ function updateZombies(dt) {
         // Gravity
         z.vy += GRAVITY * dt;
 
-        // Apply knockback displacement (decayed by zombie's own acceleration)
-        const walkerAccel = z.speed / 0.5;
-        z.x += z.knockVx * dt;
-        z.y += z.knockVy * dt;
-        // Resolve knockback against walls so zombies don't get stuck in terrain
-        resolveZombieX(z);
-        resolveZombieY(z);
+        // Apply knockback displacement (velocity-proportional drag)
         const knockSpd = Math.sqrt(z.knockVx * z.knockVx + z.knockVy * z.knockVy);
         if (knockSpd > 0) {
-            const decay = walkerAccel * dt;
-            if (knockSpd <= decay) { z.knockVx = 0; z.knockVy = 0; }
-            else { const s = (knockSpd - decay) / knockSpd; z.knockVx *= s; z.knockVy *= s; }
+            const prevX = z.x, prevY = z.y;
+            z.x += z.knockVx * dt;
+            z.y += z.knockVy * dt;
+            // Resolve knockback against walls so zombies don't get stuck in terrain
+            resolveZombieX(z);
+            resolveZombieY(z);
+            // Wall impact damage: if wall stopped the zombie during fast knockback
+            if (knockSpd > KNOCKBACK_WALL_MIN_SPEED && (z.x !== prevX + z.knockVx * dt || z.y !== prevY + z.knockVy * dt)) {
+                z.hp -= knockSpd * KNOCKBACK_WALL_DMG_COEFF;
+                z.knockVx = 0;
+                z.knockVy = 0;
+            } else {
+                const decay = (KNOCKBACK_BASE_DECAY + KNOCKBACK_DRAG * knockSpd) * dt;
+                if (knockSpd <= decay) { z.knockVx = 0; z.knockVy = 0; }
+                else { const s = (knockSpd - decay) / knockSpd; z.knockVx *= s; z.knockVy *= s; }
+            }
         }
 
         // Move horizontally, resolve against walls
@@ -1192,6 +1247,7 @@ function updateZombies(dt) {
         if (zombies[i].state === 'absorbing' && zombies[i].absorbTimer >= ABSORB_DURATION) {
             gameState.zombiesAbsorbed++;
             artifactOnZombieAbsorbed();
+            stateCloseAllInterfaces();
             wave.zombiesSpawned--; // respawn: let spawner send a replacement
             zombies.splice(i, 1);
         }

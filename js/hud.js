@@ -44,6 +44,13 @@ function drawHUD() {
             ctx.fillText('State Advancement Active', hudX, hudY + lineGap * 2);
         }
 
+        // Debug: zombie count overlay
+        if (DEBUG_SHOW_ZOMBIE_COUNT) {
+            ctx.font = hudFontSm;
+            ctx.fillStyle = 'rgba(255, 255, 0, 0.9)';
+            ctx.fillText(`Zombies: ${zombies.length} / ${WAVE_CONFIG.maxZombiesAlive} cap`, hudX, hudY + lineGap * 4);
+        }
+
         ctx.restore();
     }
 
@@ -91,6 +98,30 @@ function drawHUD() {
             ctx.fillStyle = 'rgba(200, 220, 255, 0.5)';
             ctx.fillText(`[Tab] ${activeWeaponIndex + 1}/${weapons.length}`, wpnX, wpnY + 16);
         }
+
+        // --- Dash Fuel Bar (above weapon display) ---
+        const fuelBarX = wpnX;
+        const fuelBarY = wpnY - 48;
+        const fuelBarW = 80;
+        const fuelBarH = 6;
+        const fuelFrac = player.dashFuel / DASH_FUEL_MAX;
+
+        // Background
+        ctx.fillStyle = 'rgba(20, 30, 50, 0.6)';
+        ctx.fillRect(fuelBarX, fuelBarY, fuelBarW, fuelBarH);
+
+        // Fill — cyan when available, red when on empty cooldown
+        if (player.dashEmptyCooldown > 0) {
+            ctx.fillStyle = 'rgba(255, 80, 80, 0.8)';
+        } else {
+            ctx.fillStyle = 'rgba(100, 210, 255, 0.8)';
+        }
+        ctx.fillRect(fuelBarX, fuelBarY, fuelBarW * fuelFrac, fuelBarH);
+
+        // Border
+        ctx.strokeStyle = 'rgba(100, 210, 255, 0.4)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(fuelBarX, fuelBarY, fuelBarW, fuelBarH);
 
         ctx.restore();
     }

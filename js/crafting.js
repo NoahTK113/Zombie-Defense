@@ -25,18 +25,14 @@ const CRAFT_PLAYER_H = TILE_SIZE * 1.8;
 
 // --- Materials ---
 const CRAFT_MATERIALS = [
-    { id: 'steel',      name: 'Steel',          color: '#8a8a8a', unlockWave: 0 },
-    { id: 'composite',  name: 'Composite',      color: '#3a3a3a', unlockWave: 0 },
-    { id: 'powercell',  name: 'Power Cell',     color: '#c87533', unlockWave: 0 },
-    { id: 'emitter',    name: 'Emitter',        color: '#ccaa22', unlockWave: 0 },
-    { id: 'plasma',     name: 'Plasma Cell',    color: '#44bbff', unlockWave: 0 },
-    { id: 'crystal',    name: 'Energy Crystal', color: '#aa44ff', unlockWave: 0 },
-    { id: 'titanium',   name: 'Titanium',       color: '#c0c8d0', unlockWave: 0 },
-    { id: 'darksteel',  name: 'Dark Steel',     color: '#2a2a40', unlockWave: 0 },
-    { id: 'voidglass',  name: 'Void Glass',     color: '#1a3050', unlockWave: 0 },
-    { id: 'mirror',     name: 'Mirror',         color: '#e0e8f0', unlockWave: 0, edgePlacement: true },
-    { id: 'lens',       name: 'Lens',           color: '#88ccee', unlockWave: 0 },
-    { id: 'diag',       name: 'Diag Mirror',    color: '#e0e8f0', unlockWave: 0, isDiagonal: true },
+    { id: 'iron',       name: 'Iron',            color: '#8b7355', cost: 350, unlockWave: 0 },
+    { id: 'steel',      name: 'Steel',          color: '#8a8a8a', cost: 700, unlockWave: 0 },
+    { id: 'composite',  name: 'Composite',      color: '#3a3a3a', cost: 420, unlockWave: 0 },
+    { id: 'powercell',  name: 'Power Cell',     color: '#c87533', cost: 2100, unlockWave: 0 },
+    { id: 'emitter',    name: 'Emitter',        color: '#ccaa22', cost: 2100, unlockWave: 0 },
+    { id: 'mirror',     name: 'Mirror',         color: '#e0e8f0', cost: 700, unlockWave: 0, edgePlacement: true },
+    { id: 'lens',       name: 'Lens',           color: '#88ccee', cost: 1400, unlockWave: 0 },
+    { id: 'diag',       name: 'Diag Mirror',    color: '#e0e8f0', cost: 700, unlockWave: 0, isDiagonal: true },
 ];
 
 // --- Crafting State ---
@@ -51,7 +47,7 @@ const craft = {
     weaponResult: null,
     lastHandleCell: null,
     establishedWeaponCell: null,
-    steelBBox: null,
+    meleeBBox: null,
     exportedSprite: null,
     exportedWeapon: null,
     exportBtnRect: null,
@@ -197,6 +193,12 @@ function craftHitButton(btn, mx, my) {
            my >= btn.y && my <= btn.y + btn.h;
 }
 
+// --- Cost helpers ---
+function craftGetMaterialCost(id) {
+    const mat = craftGetMaterial(id);
+    return mat ? (mat.cost || 0) : 0;
+}
+
 // --- Actions ---
 function craftHandlePaint(mx, my) {
     if (!craft.selectedMaterial || craft.eraseMode) { craftHandleErase(mx, my); return; }
@@ -287,6 +289,9 @@ function craftClearGrid() {
 }
 
 function craftSaveWeapon() {
+    const cost = craft.exportedWeapon.totalCost || 0;
+    if (gameState.points < cost) return;
+    gameState.points -= cost;
     const dataURL = craft.exportedSprite.toDataURL('image/png');
     const saved = JSON.parse(localStorage.getItem('zd_weapons') || '[]');
     const cellRows = craft.exportedSprite.height / CRAFT_CELL_SIZE;
@@ -335,18 +340,18 @@ function craftFindContiguous(startR, startC, materialId) {
     return cells;
 }
 
-function craftFindHandle(steelCells, bbox) {
-    const steelSet = new Set(steelCells.map(c => c.r + ',' + c.c));
+function craftFindHandle(meleeGroup, bbox) {
+    const meleeSet = new Set(meleeGroup.map(c => c.r + ',' + c.c));
     const dirs = [{ dr: -1, dc: 0 }, { dr: 1, dc: 0 }, { dr: 0, dc: -1 }, { dr: 0, dc: 1 }];
     const candidates = [];
 
-    for (const cell of steelCells) {
+    for (const cell of meleeGroup) {
         for (const d of dirs) {
             const nr = cell.r + d.dr;
             const nc = cell.c + d.dc;
             if (nr < 0 || nr >= CRAFT_GRID_ROWS || nc < 0 || nc >= CRAFT_GRID_COLS) continue;
             if (craft.grid[nr][nc] !== 'composite') continue;
-            if (steelSet.has(nr + ',' + nc)) continue;
+            if (meleeSet.has(nr + ',' + nc)) continue;
             if (nr >= bbox.minR && nr <= bbox.maxR && nc >= bbox.minC && nc <= bbox.maxC) continue;
 
             const handleCells = [];
@@ -405,36 +410,39 @@ function craftAnalyzeGrid() {
         }
     }
 
-    let steelCells = null;
-    if (craft.establishedWeaponCell && craft.grid[craft.establishedWeaponCell.r]?.[craft.establishedWeaponCell.c] === 'steel') {
-        steelCells = craftFindContiguous(craft.establishedWeaponCell.r, craft.establishedWeaponCell.c, 'steel');
+    let meleeGroup = null;
+    if (craft.establishedWeaponCell && craft.grid[craft.establishedWeaponCell.r]?.[craft.establishedWeaponCell.c] === 'iron') {
+        meleeGroup = craftFindContiguous(craft.establishedWeaponCell.r, craft.establishedWeaponCell.c, 'iron');
     }
-    if (!steelCells || steelCells.length < 2) {
+    if (!meleeGroup || meleeGroup.length < 2) {
         craft.establishedWeaponCell = null;
-        steelCells = null;
+        meleeGroup = null;
         const visited = new Set();
-        for (let r = 0; r < CRAFT_GRID_ROWS && !steelCells; r++) {
-            for (let c = 0; c < CRAFT_GRID_COLS && !steelCells; c++) {
-                if (craft.grid[r][c] !== 'steel' || visited.has(r + ',' + c)) continue;
-                const group = craftFindContiguous(r, c, 'steel');
+        for (let r = 0; r < CRAFT_GRID_ROWS && !meleeGroup; r++) {
+            for (let c = 0; c < CRAFT_GRID_COLS && !meleeGroup; c++) {
+                if (craft.grid[r][c] !== 'iron' || visited.has(r + ',' + c)) continue;
+                const group = craftFindContiguous(r, c, 'iron');
                 for (const cell of group) visited.add(cell.r + ',' + cell.c);
-                if (group.length >= 2) steelCells = group;
+                if (group.length >= 2) meleeGroup = group;
             }
         }
     }
-    if (!steelCells || steelCells.length < 2) {
+    if (!meleeGroup || meleeGroup.length < 2) {
         craft.establishedWeaponCell = null;
-        craft.steelBBox = null;
-        // No steel weapon — check for light source
+        craft.meleeBBox = null;
+        // No melee weapon — check for light source
         const lsCells = craftDetectLightSource();
         if (lsCells) {
             const emitter = lsCells[0];
             const power = lsCells[1];
             const lightDir = { dr: emitter.r - power.r, dc: emitter.c - power.c };
+            let lsCost = 0;
+            for (const cell of lsCells) lsCost += craftGetMaterialCost(craft.grid[cell.r][cell.c]);
             craft.weaponResult = {
                 name: 'Light Source',
                 type: 'lightsource',
-                steelCount: 0,
+                totalCost: lsCost,
+                meleeGroupCount: 0,
                 clubLength: 0,
                 handleLength: 0,
                 weight: 0,
@@ -450,7 +458,7 @@ function craftAnalyzeGrid() {
                 handle: null,
                 orientation: 'bottom',
                 lightDir,
-                steelBBox: {
+                meleeBBox: {
                     minR: Math.min(lsCells[0].r, lsCells[1].r),
                     maxR: Math.max(lsCells[0].r, lsCells[1].r),
                     minC: Math.min(lsCells[0].c, lsCells[1].c),
@@ -460,43 +468,43 @@ function craftAnalyzeGrid() {
         }
         return;
     }
-    craft.establishedWeaponCell = { r: steelCells[0].r, c: steelCells[0].c };
+    craft.establishedWeaponCell = { r: meleeGroup[0].r, c: meleeGroup[0].c };
 
     let minR = Infinity, maxR = -Infinity, minC = Infinity, maxC = -Infinity;
-    for (const cell of steelCells) {
+    for (const cell of meleeGroup) {
         if (cell.r < minR) minR = cell.r;
         if (cell.r > maxR) maxR = cell.r;
         if (cell.c < minC) minC = cell.c;
         if (cell.c > maxC) maxC = cell.c;
     }
-    craft.steelBBox = { minR, maxR, minC, maxC };
+    craft.meleeBBox = { minR, maxR, minC, maxC };
 
-    const handle = craftFindHandle(steelCells, craft.steelBBox);
+    const handle = craftFindHandle(meleeGroup, craft.meleeBBox);
     const hasHandle = handle !== null;
     const handleLen = hasHandle ? handle.len : 0;
 
-    const weaponCells = steelCells.map(c => ({ ...c }));
+    const weaponCells = meleeGroup.map(c => ({ ...c }));
     if (handle) {
         for (const cell of handle.cells) weaponCells.push({ r: cell.r, c: cell.c });
     }
 
-    const steelCount = steelCells.length;
-    const bboxRows = craft.steelBBox.maxR - craft.steelBBox.minR + 1;
-    const bboxCols = craft.steelBBox.maxC - craft.steelBBox.minC + 1;
+    const meleeGroupCount = meleeGroup.length;
+    const bboxRows = craft.meleeBBox.maxR - craft.meleeBBox.minR + 1;
+    const bboxCols = craft.meleeBBox.maxC - craft.meleeBBox.minC + 1;
     const clubLength = hasHandle
         ? (handle.axis === 'v' ? bboxRows : bboxCols)
         : Math.max(bboxRows, bboxCols);
     const handleLength = handleLen;
-    const weight = steelCount * 1.0 + handleLen * 0.2;
+    const weight = meleeGroupCount * 1.0 + handleLen * 0.2;
     const range = (clubLength + handleLength) * 0.27 + 1.2;
-    const name = hasHandle ? 'Steel Club' : 'Steel Club (no grip)';
+    const name = hasHandle ? 'Iron Club' : 'Iron Club (no grip)';
 
     let orientation;
     if (hasHandle) {
         if (handle.axis === 'v') {
-            orientation = handle.firstCell.r < craft.steelBBox.minR ? 'top' : 'bottom';
+            orientation = handle.firstCell.r < craft.meleeBBox.minR ? 'top' : 'bottom';
         } else {
-            orientation = handle.firstCell.c < craft.steelBBox.minC ? 'left' : 'right';
+            orientation = handle.firstCell.c < craft.meleeBBox.minC ? 'left' : 'right';
         }
     } else {
         orientation = bboxRows >= bboxCols ? 'bottom' : 'right';
@@ -506,24 +514,24 @@ function craftAnalyzeGrid() {
     let getDistance;
     switch (orientation) {
         case 'bottom':
-            handleTipPos = craft.steelBBox.maxR + handleLen;
+            handleTipPos = craft.meleeBBox.maxR + handleLen;
             getDistance = (cell) => handleTipPos - cell.r;
             break;
         case 'top':
-            handleTipPos = craft.steelBBox.minR - handleLen;
+            handleTipPos = craft.meleeBBox.minR - handleLen;
             getDistance = (cell) => cell.r - handleTipPos;
             break;
         case 'right':
-            handleTipPos = craft.steelBBox.maxC + handleLen;
+            handleTipPos = craft.meleeBBox.maxC + handleLen;
             getDistance = (cell) => handleTipPos - cell.c;
             break;
         case 'left':
-            handleTipPos = craft.steelBBox.minC - handleLen;
+            handleTipPos = craft.meleeBBox.minC - handleLen;
             getDistance = (cell) => cell.c - handleTipPos;
             break;
     }
     let swingWeight = 0;
-    for (const cell of steelCells) {
+    for (const cell of meleeGroup) {
         swingWeight += getDistance(cell) * 1.0;
     }
     if (handle) {
@@ -532,20 +540,29 @@ function craftAnalyzeGrid() {
         }
     }
 
-    const rawDamage = 30 * Math.log(swingWeight + 1);
+    // Damage based on cell count × material damage (not swing weight)
+    let rawDamage = 0;
+    for (const cell of meleeGroup) {
+        const matId = craft.grid[cell.r][cell.c];
+        if (matId === 'iron') rawDamage += IRON_DAMAGE_PER_CELL;
+        // future: if (matId === 'steel') rawDamage += STEEL_DAMAGE_PER_CELL;
+    }
     const damage = Math.round(hasHandle ? rawDamage * 1.25 : rawDamage);
     const swingDuration = (0.08 + 0.05 * Math.sqrt(swingWeight)) * (hasHandle ? 0.75 : 1.0);
     const speed = Math.round(swingDuration * 100) / 100;
-    const knockback = Math.round(MELEE_KNOCKBACK_COEFF * Math.sqrt(swingWeight) * range);
+    const knockback = Math.round(MELEE_BASE_KNOCKBACK + MELEE_KNOCKBACK_COEFF * Math.sqrt(swingWeight) * range);
 
     const clubWidth = (orientation === 'top' || orientation === 'bottom') ? bboxCols : bboxRows;
     const colliderWidth = Math.round(clubWidth * CRAFT_TILES_PER_CELL * 100) / 100;
     const colliderHeight = Math.round(clubLength * CRAFT_TILES_PER_CELL * 100) / 100;
     const colliderOffset = Math.round(handleLength * CRAFT_TILES_PER_CELL * 100) / 100;
 
+    let totalCost = 0;
+    for (const cell of weaponCells) totalCost += craftGetMaterialCost(craft.grid[cell.r][cell.c]);
     craft.weaponResult = {
         name,
-        steelCount,
+        totalCost,
+        meleeGroupCount,
         clubLength,
         handleLength,
         weight: Math.round(weight * 100) / 100,
@@ -561,7 +578,7 @@ function craftAnalyzeGrid() {
         cells: weaponCells,
         handle,
         orientation,
-        steelBBox: { ...craft.steelBBox },
+        meleeBBox: { ...craft.meleeBBox },
     };
 }
 
@@ -1380,12 +1397,12 @@ function drawCrafting() {
         }
     }
 
-    // Steel bounding box
-    if (craft.steelBBox) {
-        const bx = craft.gridPad + craft.steelBBox.minC * CRAFT_CELL_SIZE;
-        const by = craft.gridTop + craft.steelBBox.minR * CRAFT_CELL_SIZE;
-        const bw = (craft.steelBBox.maxC - craft.steelBBox.minC + 1) * CRAFT_CELL_SIZE;
-        const bh = (craft.steelBBox.maxR - craft.steelBBox.minR + 1) * CRAFT_CELL_SIZE;
+    // Melee bounding box
+    if (craft.meleeBBox) {
+        const bx = craft.gridPad + craft.meleeBBox.minC * CRAFT_CELL_SIZE;
+        const by = craft.gridTop + craft.meleeBBox.minR * CRAFT_CELL_SIZE;
+        const bw = (craft.meleeBBox.maxC - craft.meleeBBox.minC + 1) * CRAFT_CELL_SIZE;
+        const bh = (craft.meleeBBox.maxR - craft.meleeBBox.minR + 1) * CRAFT_CELL_SIZE;
         ctx.strokeStyle = 'rgba(100, 210, 255, 0.6)';
         ctx.lineWidth = 1;
         ctx.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
@@ -1536,16 +1553,28 @@ function drawCrafting() {
             ctx.strokeRect(craft.paletteX + 9, py + 5, 24, 24);
         }
 
-        // Name
+        // Name and cost
         ctx.font = '14px Jura, sans-serif';
         ctx.fillStyle = isSelected ? 'rgba(100, 210, 255, 0.95)' : 'rgba(200, 220, 240, 0.7)';
         ctx.textAlign = 'left';
-        ctx.fillText(mat.name, craft.paletteX + 40, py + 22);
+        const costLabel = mat.cost > 0 ? ` ${mat.cost}` : '';
+        ctx.fillText(mat.name + costLabel, craft.paletteX + 40, py + 22);
     }
 
     // --- Weapon preview (right panel) ---
     if (craft.weaponResult) {
         craftDrawWeaponPreview(craft.weaponResult);
+        // Total energy cost inside preview panel
+        const canAfford = gameState.points >= craft.weaponResult.totalCost;
+        const costColor = canAfford ? 'rgba(100, 210, 255, 0.9)' : 'rgba(255, 100, 100, 0.9)';
+        ctx.textAlign = 'center';
+        ctx.font = '14px Jura, sans-serif';
+        ctx.fillStyle = 'rgba(200, 220, 240, 0.6)';
+        ctx.fillText('Total Energy Cost', craft.previewX + CRAFT_PREVIEW_W / 2, craft.previewTop + 20);
+        ctx.font = 'bold 22px Jura, sans-serif';
+        ctx.fillStyle = costColor;
+        ctx.fillText(`${craft.weaponResult.totalCost} KJ`, craft.previewX + CRAFT_PREVIEW_W / 2, craft.previewTop + 46);
+        ctx.textAlign = 'left';
     }
 
     // --- Dev stats (right of preview) ---
@@ -1570,7 +1599,7 @@ function drawCrafting() {
             ctx.fillText('180° light hemisphere', sx, sy + 62);
             statsEndY = sy + 80;
         } else {
-            ctx.fillText(`Steel blocks: ${craft.weaponResult.steelCount}`, sx, sy + 44);
+            ctx.fillText(`Iron blocks: ${craft.weaponResult.meleeGroupCount}`, sx, sy + 44);
             ctx.fillText(`Club length: ${craft.weaponResult.clubLength}`, sx, sy + 62);
             ctx.fillText(`Handle length: ${craft.weaponResult.handleLength}`, sx, sy + 80);
             ctx.fillText(`Weight: ${craft.weaponResult.weight}`, sx, sy + 98);

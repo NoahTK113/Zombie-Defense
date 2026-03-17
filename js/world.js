@@ -25,8 +25,8 @@ function setTile(x, y, type) {
     world[y * WORLD_W + x] = type;
     // Recompute flow field if solidity changed and flow field is active
     if (flowField && prev !== type) {
-        const wasSolid = (prev === TILE.EARTH || prev === TILE.BRICK || prev === TILE.ARTIFACT);
-        const nowSolid = (type === TILE.EARTH || type === TILE.BRICK || type === TILE.ARTIFACT);
+        const wasSolid = (prev !== TILE.AIR);
+        const nowSolid = (type !== TILE.AIR);
         if (wasSolid !== nowSolid) {
             computeFlowField();
             invalidatePlayerFlowField();
@@ -121,14 +121,23 @@ function buildChunk(cx, cy) {
             hash = ((hash >>> 16) ^ hash) * 0x45d9f3b | 0;
             hash = ((hash >>> 16) ^ hash) * 0x45d9f3b | 0;
             hash = ((hash >>> 16) ^ hash) & 0x7FFFFFFF;
+            let src;
             if (tile === TILE.EARTH) {
-                const src = assets.earth[hash % assets.earth.length];
-                oc.drawImage(src, 0, 0, src.width, src.height, x * TILE_TEXELS, y * TILE_TEXELS, TILE_TEXELS, TILE_TEXELS);
+                src = assets.earth[hash % assets.earth.length];
             } else if (tile === TILE.BRICK) {
-                const src = assets.brick[hash % assets.brick.length];
-                oc.drawImage(src, 0, 0, src.width, src.height, x * TILE_TEXELS, y * TILE_TEXELS, TILE_TEXELS, TILE_TEXELS);
+                src = assets.brick[hash % assets.brick.length];
             } else if (tile === TILE.ARTIFACT) {
-                const src = assets.artifactBase[hash % assets.artifactBase.length];
+                src = assets.artifactBase[hash % assets.artifactBase.length];
+            } else if (tile === TILE.CONCRETE) {
+                src = assets.concrete[hash % assets.concrete.length];
+            } else if (tile === TILE.STEEL) {
+                src = assets.steel[hash % assets.steel.length];
+            } else if (tile === TILE.MATERIAL_X) {
+                src = assets.materialX[hash % assets.materialX.length];
+            } else if (tile === TILE.MATERIAL_Y) {
+                src = assets.materialY[hash % assets.materialY.length];
+            }
+            if (src) {
                 oc.drawImage(src, 0, 0, src.width, src.height, x * TILE_TEXELS, y * TILE_TEXELS, TILE_TEXELS, TILE_TEXELS);
             }
         }

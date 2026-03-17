@@ -25,29 +25,22 @@
 
 ## 3. Weapon Types & Crafting Economics
 
-### Iron Melee (~350pts, available Round 1)
-- Pieces: 2x Iron Block + 1x Composite Grip
-- Iron Block: ~125pts, Composite Grip: ~150pts
-- Basic blunt weapons (clubs, hammers)
+### Iron Melee (available Round 1)
+- Iron: 350 KJ/cell (75 damage per cell, each cell = one wave of dominance)
+- Composite grip: 420 KJ/cell (improves swing speed, 1.25× damage bonus)
+- Basic 2-cell club: ~700 KJ, 150 damage (2 HTK wave 2)
+- Larger weapons scale linearly: 3 cells = 225 dmg, 6 cells = 450 dmg, etc.
 
-### Steel Sharp Melee (~650pts, available Round 2)
-- Pieces: 2x Steel Block + 1x Composite Grip
-- Steel Block: ~250pts
-- Sharp weapons (daggers, swords)
-
-### Plasma Weapon (~2,250pts, available Round 4)
-- Pieces: 6x Framing (100pts ea) + Grip (150pts) + Power Cell (500pts) + Electrode (500pts) + Pinch Coil (500pts)
-- Unlimited ammo powered by Power Cell
-- Creative crafting — any configuration of pieces
+### Steel Melee (future — material exists, not yet functional)
+- Steel: 700 KJ/cell
+- STEEL_DAMAGE_PER_CELL: TBD (expected ~200, making each steel cell worth ~2.5 iron cells)
 
 ### Beam Weapon (available Round 5+)
-- Pieces: Power Cell, Emitter, Mirrors, Collimator, Framing
-- Mirrors redirect beams, Collimator straightens all incoming rays
+- Power Cell: 2,100 KJ, Emitter: 2,100 KJ
+- Mirror: 700 KJ, Diagonal Mirror: 700 KJ, Lens: 1,400 KJ
+- Mirrors redirect beams, Lens focuses incoming rays
 - Creative spatial crafting — build custom beam patterns
-- Pricing TBD during playtesting
-
-### Universal Pieces
-- **Framing:** 100pts each — structural pieces placed on tile edges and diagonals
+- Damage/stats TBD during playtesting
 
 ---
 
@@ -69,7 +62,7 @@
 Ordered implementation plan:
 
 1. [x] **Key rebinding** — Tab cycles weapons, C opens comms. Updated input.js, comms.js, player.js, hud.js, renderer.js.
-2. [x] **Physics-based knockback** — Melee knockback derived from `swingWeight × range`. Separate knockVx/knockVy channel on zombies (bypasses velocity clamping). Decayed by zombie's own acceleration. Wall collisions zero knockback on contact axis.
+2. [x] **Physics-based knockback** — Melee knockback derived from `swingWeight × range`. Separate knockVx/knockVy channel on zombies (bypasses velocity clamping). Velocity-proportional drag decay (base 200 + 0.7× speed). Wall impact damage above 450 px/s (speed × 0.5 coeff).
 3. [x] **Increase base weapon speed** — `MELEE_SWING_SPEED_MULT` (0.7) scales all swing durations. `MELEE_MIN_SWING_DURATION` (0.15s) floor. Crafting stats show effective speed.
 4. [x] **Cursor-directed swing arc** — Aim angle stored at swing start. 230° arc (`MELEE_SWING_ARC`) centered on cursor direction. Hermite easing with asymmetric velocity (20% start, 30% end, peak past midpoint). Left click = CCW, right click = CW.
 5. [x] **Directional knockback** — Knockback 45° between swing tangent and radial (outward from pivot). Scaled by instantaneous angular velocity from easing curve and grip distance ratio.
@@ -79,10 +72,11 @@ Ordered implementation plan:
 9. [x] **Variable grip range (choke-up)** — Cursor distance from pivot determines weapon reach per swing. Close clicks = short range, far clicks = full reach. Collider, sprite, trail, and knockback all adjust. Collider covers steel + tip buffer only.
 10. [x] **Weapon collider overhaul** — Melee uses rotated-rect-vs-AABB (SAT), same zombie AABB as bullets. `MELEE_HIT_PADDING` expands zombie hitbox for melee. `MELEE_COLLIDER_TIP_BUFFER` extends past weapon tip. Debug overlay (backtick key) shows collider in red.
 11. [x] **Absorbing zombie collision fix** — Absorbing zombies no longer skip player collision. Comment guard prevents regression.
-12. [ ] **Dash mechanic** — Double-tap directional key to dash. Dash state in player.js. Works while swinging or not. Needs tuning.
+12. [x] **Dash mechanic** — Shift + direction for fuel-based burst thruster. Dash-strike: 1.5× damage and 1.5× knockback on melee hits during dash. 0.15s invulnerability per dash-strike hit.
 13. [ ] **Hitstop (hit freeze)** — Freeze game for 1-2 frames on melee hit. hitPauseTimer in main.js skips update when > 0.
 14. [ ] **Melee lunge** — Small forward impulse toward cursor on swing start. Adds momentum, can pair with dash.
 15. [ ] **Swing animation variants** — 2-3 random swing patterns. Randomly selected at swing start.
+16. EXPIEREMENT: Player moves while swinging large heavy weapons. Realistic two masses connected by a rigid bar physics.
 
 ---
 
@@ -149,9 +143,9 @@ A three-beat quest inspired by Myst/Outer Wilds. Simple but satisfying.
 
 ---
 
-## 10. Zombie Player Targeting ✓ DONE
+## 10. Zombie Targeting ✓ DONE
 - [x] Dual flow field system: artifact + player, both with BFS path distance
-- [x] Per-zombie targeting via path distance comparison (closer target wins)
+- [x] Normal zombies (60%) always target artifact; hunters (40%) always target player
 - [x] Player flow field recomputes on tile-granularity movement
 - [x] Corruption forces all zombies to player; revert when corruption ends
 - [x] Breach detection on both flow fields
@@ -171,7 +165,7 @@ A three-beat quest inspired by Myst/Outer Wilds. Simple but satisfying.
 ---
 
 ## 13. Wave Auto-Advance ✓ DONE
-- [x] After a wave completes, next wave starts automatically after 15-second countdown
+- [x] After a wave completes, next wave starts automatically after 60-second countdown
 - [x] Enabled by default when player clicks Conduit (artifact circle 3) to start first wave
 - [x] Player can toggle auto-advance off/on via Conduit circle during any wave state
 - [x] Conduit label updates dynamically: "Advance State" / "Resume Advance" / "Pause Advance"
@@ -180,9 +174,9 @@ A three-beat quest inspired by Myst/Outer Wilds. Simple but satisfying.
 
 ---
 
-## 14. Zombie Variety & Targeting
-- [ ] **Player-hunter zombie variant** — Random zombies that only target the player (ignore artifact). Prevents player from safely turtling behind walls.
-- [ ] **Block-breaker zombie variant** — Zombies that always destroy blocks on contact. Forces player to actively defend, not just wall off.
+## 14. Zombie Variety & Targeting ✓ DONE
+- [x] **Player-hunter zombie variant** — 40% of spawns target the player exclusively (ignore artifact). Prevents turtling behind walls.
+- [x] **Block-breaker zombie variant** — 10% of spawns move in straight lines and destroy any block on contact. Forces active wall defense.
 - [ ] **Bug fix: artifact targeting** — Zombies only path toward upper-left corner of artifact instead of spreading across all artifact tiles. Fix flow field seed to include all artifact tile positions.
 
 ---
@@ -193,13 +187,24 @@ A three-beat quest inspired by Myst/Outer Wilds. Simple but satisfying.
 ---
 
 ## 16. Balance & Polish
+- [x] **Zombie HP curve** — Linear scaling: `150 × wave`. Clean, predictable, each iron cell = one wave of dominance
+- [x] **Shovel rebalance** — Damage 75 (2 HTK wave 1), knockback 300, swing 0.35s. All stats hardcoded, not formula-derived
+- [x] **Crafted weapon damage rework** — Damage = cell count × material damage per cell (iron = 75/cell), not log(swingWeight). Handle gives 1.25× damage bonus. Swing weight only drives speed and knockback, not damage
+- [x] **Crafting economy** — Material costs: Iron 350, Composite 420, Steel 700, Mirror 700, Diag Mirror 700, Lens 1400, Power Cell 2100, Emitter 2100. Total cost displayed in preview, deducted on save
+- [x] **Knockback as fun stat** — Base knockback of 300 on all crafted weapons + swing-weight bonus. Knockback is generous across all tiers (fun) while damage is the progression gate
+- [x] **Brick refund** — Removing bricks in build mode refunds 50 KJ
+- [x] **Dash-strike tuning** — Knockback multiplier reduced from 2.0× to 1.5×
+- [x] **Knockback drag system** — Velocity-proportional deceleration replaces constant decay. `KNOCKBACK_BASE_DECAY` (200) + `KNOCKBACK_DRAG` (0.7) × speed. High-speed launches brake hard initially, coast to a stop
+- [x] **Wall impact damage** — Zombies take `speed × 0.5` damage when hitting walls during knockback above 450 px/s. Rewards positioning and wall-building strategy
+- [x] **Spawn pacing overhaul** — Base spawn interval 3.0s (was 2.5s), decay 0.1s/wave (was 0.3s), floor 0.1s (was 0.4s). Max 35 zombies alive at once (CoD-style cap). Late rounds become sustained combat, not burst overwhelm
+- [x] **Intermission timer** — 60 seconds between waves (was 15s). Enough time to craft, build, and plan
+- [x] **Player invuln** — 0.5 seconds after hit (was 0.2s). Max 2 hits/sec prevents instant death in crowds
+- [x] **Interface safety net** — All UI overlays auto-close on player hit or zombie absorption
+- [x] **Normal zombie targeting** — Normal zombies always target artifact (no longer compare path distances). Hunters always target player. Symmetric, predictable
 - [ ] Tune block health values
-- [ ] Tune weapon damage, range, cooldown per type
-- [ ] Tune zombie health, speed, pathfinding aggression per wave
-- [ ] Tune point economy across rounds 1–10
-- [ ] Playtest and iterate on dozens of parameters
-- [ ] Ensure round 1 is survivable with shovel + basic defenses
+- [ ] Tune point economy across rounds 1–10 (ongoing playtesting)
 - [ ] Ensure plasma/beam weapons feel like meaningful upgrades
+- [ ] Add steel damage per cell constant when steel weapons become functional
 
 ---
 

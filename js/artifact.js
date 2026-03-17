@@ -43,7 +43,6 @@ function getArtifactUICircles() {
 
 // Advance to next wave: increment number, set active, init spawns.
 // Artifact owns wave initiation; zombies just reads gameState.waveNumber.
-const WAVE_COUNTDOWN_SECONDS = 15;
 
 function advanceWave() {
     gameState.waveNumber++;
@@ -194,6 +193,7 @@ function doBuildAction(tx, ty) {
     } else if (t === TILE.BRICK) {
         setTile(tx, ty, TILE.AIR);
         dirtyTile(tx, ty);
+        gameState.points += 50;
         playSound('blockDig');
     }
 }

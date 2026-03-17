@@ -27,6 +27,7 @@ const SOUND_DEFS = {
     playerDeath:    { file: 'player_death.wav',     volume: 0.7, pitchRange: [1.0, 1.0] },
     playerHit:      { file: 'player_hit.wav',       volume: 0.5, pitchRange: [0.9, 1.1] },
     playerRespawn:  { file: 'player_respawn.wav',   volume: 0.5, pitchRange: [1.0, 1.0] },
+    dashStrikeHit:  { file: 'dash_strike_hit.wav', volume: 0.7, pitchRange: [0.9, 1.1] },
 };
 
 function initAudio() {

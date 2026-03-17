@@ -66,7 +66,7 @@ const swingTrail = []; // { x, y, age } in world coords
 
 // Raycast from player center toward cursor, find first solid block within range
 function getShovelTargetBlock() {
-    const aim = screenToWorld(mouse.x, mouse.y);
+    const aim = physicsScreenToWorld(mouse.x, mouse.y);
     const startX = player.x;
     const startY = player.y - player.h / 2;
     const dx = aim.x - startX;
@@ -91,14 +91,9 @@ function getShovelTargetBlock() {
     return null;
 }
 
-function screenToWorld(sx, sy) {
-    const tileScreen = Math.max(1, Math.round(TILE_SIZE * camera.zoom));
-    const effectiveZoom = tileScreen / TILE_SIZE;
-    return { x: camera.x + sx / effectiveZoom, y: camera.y + sy / effectiveZoom };
-}
 
 function shootBullet() {
-    const aim = screenToWorld(mouse.x, mouse.y);
+    const aim = physicsScreenToWorld(mouse.x, mouse.y);
     const startX = player.x;
     const startY = player.y - player.h / 2; // shoot from chest level
     const dx = aim.x - startX;
@@ -132,7 +127,7 @@ function shovelSwing(clockwise = true) {
     playSoundStretched('meleeSwing', dur, 0.3);
 
     // Swing toward cursor — store aim angle for directional arc
-    const aim = screenToWorld(mouse.x, mouse.y);
+    const aim = physicsScreenToWorld(mouse.x, mouse.y);
     const pivotX = player.x;
     const pivotY = player.y - player.h * 0.45;
     const dx = aim.x - pivotX;
@@ -145,11 +140,11 @@ function shovelSwing(clockwise = true) {
     // Choke-up: cursor distance sets collider center, not tip
     const cursorDist = Math.sqrt(dx * dx + dy * dy);
     const armOffset = 1.0 * TILE_SIZE;
-    const steelHPx = weapon.colliderHeight * TILE_SIZE;
+    const meleeHPx = weapon.colliderHeight * TILE_SIZE;
     const tipBuffer = MELEE_COLLIDER_TIP_BUFFER * TILE_SIZE;
-    const halfCollider = (steelHPx + tipBuffer) / 2;
-    const fullTip = armOffset + weapon.colliderOffset * TILE_SIZE + steelHPx;
-    const minGrip = armOffset + steelHPx; // at minimum, steel must clear the hand
+    const halfCollider = (meleeHPx + tipBuffer) / 2;
+    const fullTip = armOffset + weapon.colliderOffset * TILE_SIZE + meleeHPx;
+    const minGrip = armOffset + meleeHPx; // at minimum, weapon head must clear the hand
     meleeGripDist = Math.max(minGrip, Math.min(fullTip, cursorDist + halfCollider));
 
     // Hit the block targeted by cursor raycast (shovel only)
@@ -256,14 +251,14 @@ function updateMeleeCollider() {
 
     // Collider uses meleeGripDist (choke-up) instead of full weapon tip
     const armOffset = 1.0 * TILE_SIZE;
-    const steelHPx = weapon.colliderHeight * TILE_SIZE;
+    const meleeHPx = weapon.colliderHeight * TILE_SIZE;
     const tipBuffer = MELEE_COLLIDER_TIP_BUFFER * TILE_SIZE;
-    const fullTipDist = armOffset + weapon.colliderOffset * TILE_SIZE + steelHPx;
+    const fullTipDist = armOffset + weapon.colliderOffset * TILE_SIZE + meleeHPx;
     const gripScale = meleeGripDist / fullTipDist; // knockback scales with effective reach
     const weaponTip = meleeGripDist + tipBuffer;
-    const fullLength = steelHPx + tipBuffer;
+    const fullLength = meleeHPx + tipBuffer;
     const halfH = fullLength / 2;
-    const centerDist = weaponTip - halfH; // collider covers steel + tip buffer only
+    const centerDist = weaponTip - halfH; // collider covers weapon head + tip buffer only
 
     // Canvas rotate() is clockwise, so local +Y after rotation maps to
     // (-sin(angle), cos(angle)) in world space
@@ -291,7 +286,12 @@ function updateMeleeCollider() {
         zb.top -= MELEE_HIT_PADDING;
         zb.bottom += MELEE_HIT_PADDING;
         if (rotatedRectOverlapsAABB(colliderCX, colliderCY, halfW, halfH, angle, zb)) {
-            z.hp -= weapon.damage;
+            // Dash-strike: active during thrust or post-dash slowdown window
+            const isDashStrike = player.dashSlowActive;
+            const dmgMult = isDashStrike ? DASH_STRIKE_DAMAGE_MULT : 1;
+            const kbMult = isDashStrike ? DASH_STRIKE_KNOCKBACK_MULT : 1;
+
+            z.hp -= weapon.damage * dmgMult;
             // Knockback scaled by instantaneous angular velocity from easing curve
             // Peak velocity is past midpoint; normalize so peak = 1
             const peakVel = swingEaseVel(0.5); // approximate peak (slightly off due to asymmetry)
@@ -301,8 +301,8 @@ function updateMeleeCollider() {
             const kx = swingSign * -Math.cos(angle) + -Math.sin(angle);
             const ky = swingSign * -Math.sin(angle) + Math.cos(angle);
             const kLen = Math.sqrt(kx * kx + ky * ky) || 1;
-            z.knockVx += (kx / kLen) * weapon.knockback * angVelScale * gripScale;
-            z.knockVy += (ky / kLen) * weapon.knockback * angVelScale * gripScale;
+            z.knockVx += (kx / kLen) * weapon.knockback * angVelScale * gripScale * kbMult;
+            z.knockVy += (ky / kLen) * weapon.knockback * angVelScale * gripScale * kbMult;
             // Knock absorbing zombies out of absorption
             if (z.state === 'absorbing') {
                 z.state = z.type === 'flyer' ? 'flying' : 'walking';
@@ -310,7 +310,15 @@ function updateMeleeCollider() {
                 z.absorbImmunity = 0.3; // brief immunity so knockback can move them away
             }
             meleeHitSet.add(z);
-            playSound('meleeHit');
+
+            if (isDashStrike) {
+                player.invulnTimer = Math.max(player.invulnTimer, DASH_STRIKE_INVULN);
+                // dashStrikeHit stub — falls back to meleeHit until .wav is added
+                if (soundElements['dashStrikeHit']) playSound('dashStrikeHit');
+                else playSound('meleeHit');
+            } else {
+                playSound('meleeHit');
+            }
             triggerScreenShake(SCREEN_SHAKE_INTENSITY, SCREEN_SHAKE_DURATION);
         }
     }

@@ -438,7 +438,7 @@ function draw() {
         ctx.fillStyle = '#2ecc71';
         ctx.fillRect(px, py, pw, ph);
 
-        const aim = screenToWorld(mouse.x, mouse.y);
+        const aim = physicsScreenToWorld(mouse.x, mouse.y);
         const aimingRight = aim.x >= player.x;
 
         ctx.fillStyle = '#fff';

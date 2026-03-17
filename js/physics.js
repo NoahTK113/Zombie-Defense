@@ -4,7 +4,24 @@
 
 function isSolid(tx, ty) {
     const t = tileAt(tx, ty);
-    return t === TILE.EARTH || t === TILE.BRICK || t === TILE.ARTIFACT;
+    return t !== TILE.AIR;
+}
+
+// Convert screen coordinates to world coordinates
+function physicsScreenToWorld(sx, sy) {
+    const tileScreen = Math.max(1, Math.round(TILE_SIZE * camera.zoom));
+    const effectiveZoom = tileScreen / TILE_SIZE;
+    return { x: camera.x + sx / effectiveZoom, y: camera.y + sy / effectiveZoom };
+}
+
+// Get normalized direction vector from player center to cursor (world space)
+function physicsGetCursorDir() {
+    const aim = physicsScreenToWorld(mouse.x, mouse.y);
+    const dx = aim.x - player.x;
+    const dy = aim.y - (player.y - player.h / 2);
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len < 0.001) return { x: 0, y: 0 };
+    return { x: dx / len, y: dy / len };
 }
 
 // Step-up: walk up 1-tile ledges without jumping (works for player and zombies)

@@ -35,7 +35,7 @@ function drawLighting(camX, camY, effectiveZoom) {
     if (gameState.flashlightOn && !player.dead) {
         const plx = (player.x - camX) * effectiveZoom;
         const ply = ((player.y - player.h * 0.4) - camY) * effectiveZoom;
-        const aim = screenToWorld(mouse.x, mouse.y);
+        const aim = physicsScreenToWorld(mouse.x, mouse.y);
         const flashDir = aim.x >= player.x ? 1 : -1;
 
         const beamLen = FLASHLIGHT_BEAM_RANGE * TILE_SIZE * effectiveZoom;

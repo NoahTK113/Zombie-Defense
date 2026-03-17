@@ -63,8 +63,8 @@ function update(dt) {
     if (gameState.gameMode === 'player') {
         const targetX = player.x - (canvas.width / camera.zoom) / 2;
         const targetY = (player.y - player.h / 2) - (canvas.height / camera.zoom) / 2;
-        camera.x += (targetX - camera.x) * Math.min(1, 8 * dt);
-        camera.y += (targetY - camera.y) * Math.min(1, 8 * dt);
+        camera.x += (targetX - camera.x) * Math.min(1, CAMERA_FOLLOW_SPEED * dt);
+        camera.y += (targetY - camera.y) * Math.min(1, CAMERA_FOLLOW_SPEED * dt);
     }
 
     clampCamera();
